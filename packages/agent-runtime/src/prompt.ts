@@ -2,6 +2,7 @@ import type {
   ComponentBuildSpec,
   ProjectProfile,
   ReadyProjectFoundation,
+  VerificationReport,
 } from "@foundry/contracts";
 
 export interface ComponentPromptInput {
@@ -57,4 +58,21 @@ Ownership and safety:
 - Do not use placeholder CMS data in the production component.
 
 The manifest must be valid JSON with schemaVersion 1 and include componentId, componentPath, cmsType, variant, fragmentPath, fragmentName, transformPath, registryKey, bindings, and ownedFiles.`;
+}
+
+export function buildRepairPrompt(report: VerificationReport, componentRoot: string): string {
+  const failures = report.gates
+    .filter(({ status }) => status === "failed")
+    .map(({ id, label, detail }) => ({ id, label, detail: detail ?? "No detail provided" }));
+
+  return `The harness rejected verification attempt ${report.attempt}.
+
+Fix every failed gate below, then stop. Re-run focused checks when useful.
+
+${JSON.stringify(failures, null, 2)}
+
+Ownership remains unchanged:
+- Edit only files under ${componentRoot}.
+- Keep section.manifest.json accurate, including ownedFiles and CMS bindings.
+- Do not commit, merge, rebase, or edit shared project files. The harness owns Git and integration.`;
 }

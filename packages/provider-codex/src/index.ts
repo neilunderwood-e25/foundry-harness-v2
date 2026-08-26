@@ -20,6 +20,15 @@ export interface CodexClient {
       options?: TurnOptions,
     ): Promise<{ events: AsyncGenerator<ThreadEvent> }>;
   };
+  resumeThread(
+    id: string,
+    options?: ThreadOptions,
+  ): {
+    runStreamed(
+      input: string,
+      options?: TurnOptions,
+    ): Promise<{ events: AsyncGenerator<ThreadEvent> }>;
+  };
 }
 
 export interface CodexAgentProviderOptions {
@@ -93,7 +102,7 @@ export class CodexAgentProvider implements AgentProvider {
     request: AgentExecutionRequest,
     emit: AgentEventSink,
   ): Promise<AgentExecutionResult> {
-    const thread = this.#client.startThread({
+    const threadOptions: ThreadOptions = {
       workingDirectory: request.workingDirectory,
       ...(request.specification.agent.model ? { model: request.specification.agent.model } : {}),
       ...(request.specification.agent.reasoningEffort
@@ -102,9 +111,12 @@ export class CodexAgentProvider implements AgentProvider {
       sandboxMode: "workspace-write",
       approvalPolicy: "never",
       networkAccessEnabled: this.#networkAccessEnabled,
-    });
+    };
+    const thread = request.sessionId
+      ? this.#client.resumeThread(request.sessionId, threadOptions)
+      : this.#client.startThread(threadOptions);
 
-    let sessionId: string | undefined;
+    let sessionId: string | undefined = request.sessionId;
     let summary: string | undefined;
     try {
       const { events } = await thread.runStreamed(request.prompt, {

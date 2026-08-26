@@ -8,6 +8,7 @@ import {
   AgentProviderError,
   AgentProviderRegistry,
   buildComponentPrompt,
+  buildRepairPrompt,
   type AgentProvider,
 } from "../src/index.js";
 
@@ -102,6 +103,34 @@ describe("agent runtime", () => {
     expect(prompt).toContain("src/components/sections/hero");
     expect(prompt).toContain(fingerprint);
     expect(prompt).toContain(specification.design.desktopFrameUrl);
+    expect(prompt).toContain("Do not commit");
+  });
+
+  it("turns failed verification gates into a component-scoped repair prompt", () => {
+    const prompt = buildRepairPrompt(
+      {
+        schemaVersion: 1,
+        runId: specification.runId,
+        componentId: specification.componentId,
+        verdict: "failed",
+        attempt: 1,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        gates: [
+          {
+            id: "manifest",
+            label: "Section manifest",
+            category: "data",
+            status: "failed",
+            detail: "ownedFiles is incomplete",
+            artifacts: [],
+          },
+        ],
+      },
+      "src/components/sections/hero",
+    );
+    expect(prompt).toContain("ownedFiles is incomplete");
+    expect(prompt).toContain("src/components/sections/hero");
     expect(prompt).toContain("Do not commit");
   });
 });

@@ -4,12 +4,13 @@ import { readFile } from "node:fs/promises";
 import { AgentProviderRegistry } from "@foundry/agent-runtime";
 import {
   BatchExecutionRequestSchema,
+  BatchDeliveryRequestSchema,
   ComponentBuildSpecSchema,
   FoundationSetupSpecSchema,
   type ProjectProfile,
 } from "@foundry/contracts";
 import { inspectProjectFoundation, setupProjectFoundation } from "@foundry/foundation";
-import { BatchExecutor } from "@foundry/orchestrator";
+import { BatchDeliveryPipeline, BatchExecutor } from "@foundry/orchestrator";
 import { inspectNextProject } from "@foundry/project-inspector";
 import { ClaudeAgentProvider } from "@foundry/provider-claude";
 import { CodexAgentProvider } from "@foundry/provider-codex";
@@ -21,6 +22,7 @@ function usage(): never {
   foundry foundation inspect <project-dir> [project-id]
   foundry foundation setup <project-dir> <setup.json>
   foundry batch execute <execution.json>
+  foundry batch deliver <delivery.json>
 `);
   process.exit(2);
 }
@@ -96,6 +98,22 @@ async function main(): Promise<void> {
     });
     print(result);
     if (result.status !== "completed") process.exitCode = 1;
+    return;
+  }
+
+  if (args[0] === "batch" && args[1] === "deliver" && args[2]) {
+    const request = BatchDeliveryRequestSchema.parse(await readJson(args[2]));
+    const providers = new AgentProviderRegistry([
+      new CodexAgentProvider(),
+      new ClaudeAgentProvider(),
+    ]);
+    const result = await new BatchDeliveryPipeline({ providers }).deliver(request, {
+      onEvent(event) {
+        process.stderr.write(`${JSON.stringify(event)}\n`);
+      },
+    });
+    print(result);
+    if (result.status !== "passed") process.exitCode = 1;
     return;
   }
 

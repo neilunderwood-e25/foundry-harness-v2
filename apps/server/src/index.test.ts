@@ -34,4 +34,16 @@ describe("server", () => {
     expect(response.json()).toMatchObject({ error: "INVALID_REQUEST" });
     await server.close();
   });
+
+  it("validates batch delivery requests before starting providers", async () => {
+    const server = createServer({ logger: false });
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/runs/deliver",
+      payload: {},
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: "INVALID_REQUEST" });
+    await server.close();
+  });
 });

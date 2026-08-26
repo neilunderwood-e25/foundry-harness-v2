@@ -1,0 +1,354 @@
+import { execFile } from "node:child_process";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { promisify } from "node:util";
+import {
+  IntegrationResultSchema,
+  SectionManifestSchema,
+  VerificationReportSchema,
+  type BatchDeliveryRequest,
+  type ChangedFile,
+  type DeliveredComponent,
+  type IntegrationResult,
+  type SectionManifest,
+  type VerificationGate,
+  type WorktreeHandle,
+} from "@foundry/contracts";
+import { ProcessCommandRunner, verifyProjectCommands, type CommandRunner } from "@foundry/verifier";
+import { IntegrationError } from "./errors.js";
+
+const execFileAsync = promisify(execFile);
+
+export interface GitBatchIntegratorOptions {
+  readonly commandRunner?: CommandRunner;
+  readonly clock?: () => Date;
+}
+
+async function git(cwd: string, args: readonly string[], code: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", [...args], {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return stdout.trim();
+  } catch (error) {
+    throw new IntegrationError({
+      code,
+      message: `Git command failed: git ${args.join(" ")}`,
+      details: { cwd, args },
+      cause: error,
+    });
+  }
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function safeSegment(value: string): string {
+  const segment = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!segment) {
+    throw new IntegrationError({ code: "INVALID_RUN_ID", message: "Run ID cannot form a branch" });
+  }
+  return segment;
+}
+
+function normalize(path: string): string {
+  return path.split(sep).join("/");
+}
+
+function importPath(fromDirectory: string, target: string): string {
+  const extension = extname(target);
+  const withoutExtension = extension ? target.slice(0, -extension.length) : target;
+  const rel = normalize(relative(fromDirectory, withoutExtension));
+  return rel.startsWith(".") ? rel : `./${rel}`;
+}
+
+function projectPath(worktree: WorktreeHandle, path: string): string {
+  const subdirectory = normalize(relative(worktree.checkoutDir, worktree.workingDirectory));
+  const candidate = normalize(path);
+  if (!subdirectory) return candidate;
+  return candidate.startsWith(`${subdirectory}/`)
+    ? candidate.slice(subdirectory.length + 1)
+    : candidate;
+}
+
+function parsePorcelain(output: string): ChangedFile[] {
+  const entries = output.split("\0").filter(Boolean);
+  const files: ChangedFile[] = [];
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!entry || entry.length < 4) continue;
+    const status = entry.slice(0, 2);
+    files.push({ status, path: entry.slice(3) });
+    if (status.includes("R") || status.includes("C")) index += 1;
+  }
+  return files;
+}
+
+async function readManifests(
+  workingDirectory: string,
+  sectionRoot: string,
+  components: readonly DeliveredComponent[],
+): Promise<SectionManifest[]> {
+  const manifests: SectionManifest[] = [];
+  for (const component of components) {
+    const slug = component.changedFiles
+      .map(({ path }) => projectPath(component.worktree, path))
+      .find((path) => path.startsWith(`${sectionRoot}/`))
+      ?.slice(sectionRoot.length + 1)
+      .split("/")[0];
+    if (!slug) {
+      throw new IntegrationError({
+        code: "COMPONENT_SLUG_MISSING",
+        message: `Cannot locate component directory for ${component.componentId}`,
+      });
+    }
+    const path = resolve(workingDirectory, sectionRoot, slug, "section.manifest.json");
+    manifests.push(SectionManifestSchema.parse(JSON.parse(await readFile(path, "utf8"))));
+  }
+  return manifests.sort((left, right) => left.registryKey.localeCompare(right.registryKey));
+}
+
+async function generateWiring(
+  workingDirectory: string,
+  request: BatchDeliveryRequest,
+  manifests: readonly SectionManifest[],
+): Promise<string[]> {
+  const registryPath = `${request.project.paths.sectionRoot}/foundry.registry.generated.ts`;
+  const fragmentsRoot = request.project.paths.graphqlFragments ?? request.project.paths.sectionRoot;
+  const fragmentsPath = `${fragmentsRoot}/foundry.fragments.generated.ts`;
+  const registryDirectory = dirname(registryPath);
+
+  const registryEntries = manifests
+    .map(
+      (manifest) =>
+        `  ${JSON.stringify(manifest.registryKey)}: {\n` +
+        `    component: () => import(${JSON.stringify(importPath(registryDirectory, manifest.componentPath))}),\n` +
+        `    transform: () => import(${JSON.stringify(importPath(registryDirectory, manifest.transformPath))}),\n` +
+        "  },",
+    )
+    .join("\n");
+  const registrySource =
+    "// Generated by Foundry. Do not edit by hand.\n" +
+    "export const foundrySectionRegistry = {\n" +
+    `${registryEntries}\n` +
+    "} as const;\n";
+
+  const fragments = await Promise.all(
+    manifests.map(async (manifest) => ({
+      name: manifest.fragmentName,
+      source: await readFile(resolve(workingDirectory, manifest.fragmentPath), "utf8"),
+    })),
+  );
+  const fragmentsSource =
+    "// Generated by Foundry. Do not edit by hand.\n" +
+    `export const foundrySectionFragments = ${JSON.stringify(fragments, null, 2)} as const;\n` +
+    "export const foundrySectionFragmentDocument = foundrySectionFragments\n" +
+    "  .map(({ source }) => source)\n" +
+    '  .join("\\n\\n");\n';
+
+  for (const [path, source] of [
+    [registryPath, registrySource],
+    [fragmentsPath, fragmentsSource],
+  ] as const) {
+    await mkdir(dirname(resolve(workingDirectory, path)), { recursive: true });
+    await writeFile(resolve(workingDirectory, path), source, "utf8");
+  }
+  return [registryPath, fragmentsPath];
+}
+
+export class GitBatchIntegrator {
+  readonly #runner: CommandRunner;
+  readonly #clock: () => Date;
+
+  constructor(options: GitBatchIntegratorOptions = {}) {
+    this.#runner = options.commandRunner ?? new ProcessCommandRunner();
+    this.#clock = options.clock ?? (() => new Date());
+  }
+
+  async changedFiles(worktree: WorktreeHandle): Promise<ChangedFile[]> {
+    const output = await git(
+      worktree.checkoutDir,
+      ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+      "CHANGED_FILES_READ_FAILED",
+    );
+    return parsePorcelain(output);
+  }
+
+  async commitComponent(
+    worktree: WorktreeHandle,
+    changedFiles: readonly ChangedFile[],
+    message: string,
+  ): Promise<string> {
+    if (changedFiles.length === 0) {
+      throw new IntegrationError({
+        code: "EMPTY_COMPONENT_CHANGESET",
+        message: "A verified component must contain changes before it can be committed",
+      });
+    }
+    const paths = changedFiles.map(({ path }) => path);
+    if (paths.some((path) => isAbsolute(path) || path.split(/[\\/]/).includes(".."))) {
+      throw new IntegrationError({
+        code: "UNSAFE_COMPONENT_PATH",
+        message: "Component changes contain an unsafe path",
+      });
+    }
+    await git(worktree.checkoutDir, ["add", "--", ...paths], "COMPONENT_STAGE_FAILED");
+    await git(worktree.checkoutDir, ["commit", "-m", message], "COMPONENT_COMMIT_FAILED");
+    return git(worktree.checkoutDir, ["rev-parse", "HEAD"], "COMPONENT_COMMIT_READ_FAILED");
+  }
+
+  async integrate(
+    request: BatchDeliveryRequest,
+    components: readonly DeliveredComponent[],
+  ): Promise<IntegrationResult> {
+    const repositoryRoot = await realpath(
+      await git(request.project.rootDir, ["rev-parse", "--show-toplevel"], "NOT_A_GIT_REPOSITORY"),
+    );
+    const projectRoot = await realpath(request.project.rootDir);
+    const projectSubdirectory = relative(repositoryRoot, projectRoot);
+    if (projectSubdirectory.startsWith("..") || isAbsolute(projectSubdirectory)) {
+      throw new IntegrationError({
+        code: "PROJECT_OUTSIDE_REPOSITORY",
+        message: "Project root is outside its resolved Git repository",
+      });
+    }
+    const runSegment = safeSegment(request.batch.runId);
+    const branch = `foundry/${runSegment}/integration`;
+    const checkoutDir = resolve(request.worktreeRoot, runSegment, "integration");
+    const worktreeRelative = relative(repositoryRoot, checkoutDir);
+    if (
+      worktreeRelative === "" ||
+      (!worktreeRelative.startsWith("..") && !isAbsolute(worktreeRelative))
+    ) {
+      throw new IntegrationError({
+        code: "WORKTREE_ROOT_INSIDE_REPOSITORY",
+        message: "The integration worktree must be outside the target Git repository",
+      });
+    }
+    if (await exists(checkoutDir)) {
+      throw new IntegrationError({
+        code: "INTEGRATION_PATH_EXISTS",
+        message: `Integration path already exists: ${checkoutDir}`,
+      });
+    }
+    await mkdir(dirname(checkoutDir), { recursive: true });
+    await git(
+      repositoryRoot,
+      ["worktree", "add", "-b", branch, checkoutDir, request.batch.baseCommit],
+      "INTEGRATION_WORKTREE_CREATE_FAILED",
+    );
+    const workingDirectory = resolve(checkoutDir, projectSubdirectory);
+    const componentCommits = components.map(({ commit }) => commit);
+    try {
+      for (const commit of componentCommits) {
+        await git(checkoutDir, ["cherry-pick", commit], "COMPONENT_INTEGRATION_FAILED");
+      }
+
+      const manifests = await readManifests(
+        workingDirectory,
+        request.project.paths.sectionRoot,
+        components,
+      );
+      const generatedFiles = await generateWiring(workingDirectory, request, manifests);
+      const startedAt = this.#clock().toISOString();
+      const commandGates = await verifyProjectCommands(
+        workingDirectory,
+        request.project.commands,
+        request.verification,
+        this.#runner,
+      );
+      const gates: VerificationGate[] = [
+        {
+          id: "integration",
+          label: "Serial component integration",
+          category: "code",
+          status: "passed",
+          detail: `Cherry-picked ${componentCommits.length} verified component commits`,
+          artifacts: [],
+        },
+        ...commandGates,
+      ];
+      const report = VerificationReportSchema.parse({
+        schemaVersion: 1,
+        runId: request.batch.runId,
+        componentId: "integration",
+        verdict: gates.some(({ status }) => status === "failed") ? "failed" : "passed",
+        attempt: 1,
+        startedAt,
+        completedAt: this.#clock().toISOString(),
+        gates,
+      });
+      if (report.verdict === "failed") {
+        return IntegrationResultSchema.parse({
+          status: "failed",
+          branch,
+          checkoutDir,
+          baseCommit: request.batch.baseCommit,
+          componentCommits,
+          generatedFiles,
+          gates: [report],
+          code: "INTEGRATION_VERIFICATION_FAILED",
+          message: "The integrated project did not pass verification",
+        });
+      }
+
+      const generatedRepositoryPaths = generatedFiles.map((path) =>
+        projectSubdirectory ? normalize(`${projectSubdirectory}/${path}`) : path,
+      );
+      await git(checkoutDir, ["add", "--", ...generatedRepositoryPaths], "WIRING_STAGE_FAILED");
+      await git(
+        checkoutDir,
+        ["commit", "-m", `feat(foundry): wire ${request.batch.runId}`],
+        "WIRING_COMMIT_FAILED",
+      );
+      const headCommit = await git(
+        checkoutDir,
+        ["rev-parse", "HEAD"],
+        "INTEGRATION_HEAD_READ_FAILED",
+      );
+      return IntegrationResultSchema.parse({
+        status: "passed",
+        branch,
+        checkoutDir,
+        baseCommit: request.batch.baseCommit,
+        headCommit,
+        componentCommits,
+        generatedFiles,
+        gates: [report],
+      });
+    } catch (error) {
+      const failure =
+        error instanceof IntegrationError
+          ? error
+          : new IntegrationError({
+              code: "INTEGRATION_FAILED",
+              message: error instanceof Error ? error.message : String(error),
+              cause: error,
+            });
+      return IntegrationResultSchema.parse({
+        status: "failed",
+        branch,
+        checkoutDir,
+        baseCommit: request.batch.baseCommit,
+        componentCommits,
+        generatedFiles: [],
+        gates: [],
+        code: failure.code,
+        message: failure.message,
+      });
+    }
+  }
+}

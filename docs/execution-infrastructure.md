@@ -16,8 +16,9 @@ Each component job receives a new branch and Git worktree created from the batch
 commit. The worktree storage root must be outside the target repository. This avoids polluting the
 target checkout and allows multiple agents to edit concurrently.
 
-Worktrees are retained whether a job succeeds or fails. Milestone 3 never commits, removes, merges,
-or rebases them. A later verification and integration milestone owns those actions.
+Worktrees are retained whether a job succeeds or fails. `batch execute` never commits, removes,
+merges, or rebases them. The Milestone 4 `batch deliver` workflow owns verification, component
+commits, and integration while continuing to retain every worktree for inspection.
 
 ## Concurrency and ownership
 

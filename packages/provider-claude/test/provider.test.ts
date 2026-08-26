@@ -85,4 +85,24 @@ describe("Claude provider", () => {
       { type: "tool-completed", tool: "Edit", ok: true, callId: "tool-1" },
     ]);
   });
+
+  it("passes a saved session to the SDK for repair turns", async () => {
+    let options: Options | undefined;
+    const query: ClaudeQuery = async function* (input) {
+      options = input.options;
+      yield message({
+        type: "result",
+        subtype: "success",
+        session_id: "session-existing",
+        is_error: false,
+        result: "Fixed",
+      });
+    };
+    await new ClaudeAgentProvider({ query }).execute(
+      { ...request(), sessionId: "session-existing" },
+      () => undefined,
+    );
+
+    expect(options?.resume).toBe("session-existing");
+  });
 });

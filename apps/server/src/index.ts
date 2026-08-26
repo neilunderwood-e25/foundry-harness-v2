@@ -1,13 +1,14 @@
 import { AgentProviderRegistry, type AgentProvider } from "@foundry/agent-runtime";
 import {
   BatchExecutionRequestSchema,
+  BatchDeliveryRequestSchema,
   ComponentBuildSpecSchema,
   FoundationInspectionRequestSchema,
   FoundationSetupRequestSchema,
   ProjectInspectionRequestSchema,
 } from "@foundry/contracts";
 import { inspectProjectFoundation, setupProjectFoundation } from "@foundry/foundation";
-import { BatchExecutor } from "@foundry/orchestrator";
+import { BatchDeliveryPipeline, BatchExecutor } from "@foundry/orchestrator";
 import { inspectNextProject } from "@foundry/project-inspector";
 import { ClaudeAgentProvider } from "@foundry/provider-claude";
 import { CodexAgentProvider } from "@foundry/provider-codex";
@@ -104,6 +105,28 @@ export function createServer(
     } catch (error) {
       return reply.status(409).send({
         error: "BATCH_EXECUTION_FAILED",
+        message: error instanceof Error ? error.message : String(error),
+        events,
+      });
+    }
+  });
+
+  server.post("/api/runs/deliver", async (request, reply) => {
+    const input = BatchDeliveryRequestSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({ error: "INVALID_REQUEST", issues: input.error.issues });
+    }
+    const events: unknown[] = [];
+    try {
+      const result = await new BatchDeliveryPipeline({ providers }).deliver(input.data, {
+        onEvent(event) {
+          events.push(event);
+        },
+      });
+      return { result, events };
+    } catch (error) {
+      return reply.status(409).send({
+        error: "BATCH_DELIVERY_FAILED",
         message: error instanceof Error ? error.message : String(error),
         events,
       });

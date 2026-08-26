@@ -1,13 +1,13 @@
 {
-  "name": "@foundry/orchestrator",
+  "name": "@foundry/integration",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },
@@ -16,12 +16,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@foundry/agent-runtime": "workspace:*",
     "@foundry/contracts": "workspace:*",
-    "@foundry/domain": "workspace:*",
-    "@foundry/integration": "workspace:*",
-    "@foundry/verifier": "workspace:*",
-    "@foundry/worktrees": "workspace:*"
+    "@foundry/verifier": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.5.0",

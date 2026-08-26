@@ -27,6 +27,7 @@ export interface AgentExecutionRequest {
   readonly specification: ComponentBuildSpec;
   readonly project: ProjectProfile;
   readonly foundation: ReadyProjectFoundation;
+  readonly sessionId?: string;
   readonly signal?: AbortSignal;
 }
 

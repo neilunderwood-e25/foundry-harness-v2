@@ -72,6 +72,9 @@ describe("Codex provider", () => {
           },
         };
       },
+      resumeThread() {
+        throw new Error("Not expected in this test");
+      },
     };
     const provider = new CodexAgentProvider({ client, networkAccessEnabled: false });
     const emitted: AgentStreamEvent[] = [];
@@ -97,5 +100,29 @@ describe("Codex provider", () => {
       { type: "tool-completed", tool: "command", ok: true, callId: "command-1" },
       { type: "text", text: "Hero is ready" },
     ]);
+  });
+
+  it("resumes the saved thread for repair turns", async () => {
+    let resumedId: string | undefined;
+    const client: CodexClient = {
+      startThread() {
+        throw new Error("Expected a resumed thread");
+      },
+      resumeThread(id) {
+        resumedId = id;
+        return {
+          async runStreamed() {
+            return { events: events() };
+          },
+        };
+      },
+    };
+    const result = await new CodexAgentProvider({ client }).execute(
+      { ...request(), sessionId: "thread-existing" },
+      () => undefined,
+    );
+
+    expect(resumedId).toBe("thread-existing");
+    expect(result.sessionId).toBe("thread-1");
   });
 });

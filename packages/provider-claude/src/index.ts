@@ -95,6 +95,7 @@ export class ClaudeAgentProvider implements AgentProvider {
       ...(request.specification.agent.reasoningEffort
         ? { effort: request.specification.agent.reasoningEffort }
         : {}),
+      ...(request.sessionId ? { resume: request.sessionId } : {}),
     };
 
     try {

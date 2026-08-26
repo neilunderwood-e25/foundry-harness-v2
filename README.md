@@ -45,3 +45,18 @@ Projects without a valid foundation can be configured from an explicit setup doc
 Milestone 3 adds provider-neutral Codex and Claude SDK adapters, exact-commit Git worktrees, bounded
 parallel component jobs, ordered execution events, cancellation, and component ownership checks.
 See [execution infrastructure](docs/execution-infrastructure.md).
+
+## Verified delivery
+
+Milestone 4 composes parallel generation with deterministic verification, bounded same-session
+repairs, component commits, and serial integration. Passed commits are cherry-picked in batch order
+into a dedicated integration worktree. Foundry generates registry loaders and a combined GraphQL
+fragment document there, verifies the integrated project, and leaves the target checkout untouched.
+
+```bash
+pnpm build
+node apps/cli/dist/index.js batch deliver /absolute/path/to/delivery.json
+```
+
+See [verified delivery](docs/verified-delivery.md) for the gates, repair policy, generated files, and
+integration guarantees.
