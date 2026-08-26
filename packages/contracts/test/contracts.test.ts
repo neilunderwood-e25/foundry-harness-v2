@@ -3,6 +3,7 @@ import {
   BatchBuildSpecSchema,
   ComponentBuildSpecSchema,
   ProjectFoundationSchema,
+  QualityPolicySchema,
   RelativeProjectPathSchema,
 } from "../src/index.js";
 
@@ -75,5 +76,15 @@ describe("project foundation contracts", () => {
   it("rejects paths that escape the project", () => {
     expect(RelativeProjectPathSchema.safeParse("../secret").success).toBe(false);
     expect(RelativeProjectPathSchema.safeParse("components/sections/Hero.tsx").success).toBe(true);
+  });
+});
+
+describe("quality policy contracts", () => {
+  it("defaults to disabled and requires slug-addressable preview templates", () => {
+    expect(QualityPolicySchema.parse({}).enabled).toBe(false);
+    expect(
+      QualityPolicySchema.safeParse({ routeTemplate: "/qa/static", selectorTemplate: "main" })
+        .success,
+    ).toBe(false);
   });
 });

@@ -28,6 +28,7 @@ export interface AgentExecutionRequest {
   readonly project: ProjectProfile;
   readonly foundation: ReadyProjectFoundation;
   readonly sessionId?: string;
+  readonly additionalReadDirectories?: readonly string[];
   readonly signal?: AbortSignal;
 }
 

@@ -14,6 +14,8 @@ jobs then pass through these deterministic gates:
 3. every declared owned file exists and every changed file is declared;
 4. the Style Guide and Container still match the frozen foundation fingerprint;
 5. configured dependency installation, typecheck, lint, test, and production-build commands pass.
+6. when enabled, desktop/mobile visual parity, intermediate-width reflow, and automated
+   accessibility checks pass.
 
 Tests are disabled by default because many application suites require external services. Build,
 typecheck, lint, and dependency installation are enabled when configured. A delivery document can
@@ -33,6 +35,9 @@ override the policy:
 ```
 
 The rest of the delivery document is identical to a batch execution document.
+
+Visual and accessibility QA is configured separately under `quality`; see
+[visual quality](visual-quality.md).
 
 ## Repair loop
 

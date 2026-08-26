@@ -18,6 +18,7 @@ function request(): AgentExecutionRequest {
     } as ComponentBuildSpec,
     project: {} as ProjectProfile,
     foundation: {} as ReadyProjectFoundation,
+    additionalReadDirectories: ["/tmp/artifacts"],
   };
 }
 

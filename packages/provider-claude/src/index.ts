@@ -83,7 +83,7 @@ export class ClaudeAgentProvider implements AgentProvider {
         autoAllowBashIfSandboxed: true,
         allowUnsandboxedCommands: false,
         filesystem: {
-          allowRead: [request.workingDirectory],
+          allowRead: [request.workingDirectory, ...(request.additionalReadDirectories ?? [])],
           allowWrite: [request.workingDirectory],
         },
         network: {

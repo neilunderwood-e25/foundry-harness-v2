@@ -44,6 +44,7 @@ export const VerificationGateSchema = z.object({
   label: NonEmptyStringSchema,
   category: z.enum(["scope", "code", "foundation", "data", "visual", "accessibility", "runtime"]),
   status: z.enum(["passed", "failed", "skipped"]),
+  repairable: z.boolean().optional(),
   detail: z.string().optional(),
   artifacts: z.array(ArtifactRefSchema).default([]),
 });

@@ -103,6 +103,7 @@ describe("agent runtime", () => {
     expect(prompt).toContain("src/components/sections/hero");
     expect(prompt).toContain(fingerprint);
     expect(prompt).toContain(specification.design.desktopFrameUrl);
+    expect(prompt).toContain('data-foundry="hero"');
     expect(prompt).toContain("Do not commit");
   });
 

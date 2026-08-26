@@ -22,6 +22,7 @@ Outcome:
 - Build the ${specification.name} section from the paired Figma frames.
 - Bind it to the mapped ${specification.cms.provider} content type.
 - Create the component, component-scoped GraphQL fragment, data transform, and SectionManifest.
+- Put data-foundry="${specification.slug}" on the section's root element for harness QA.
 - Finish only when the component-scoped implementation is internally consistent.
 
 Inputs:
@@ -74,5 +75,6 @@ ${JSON.stringify(failures, null, 2)}
 Ownership remains unchanged:
 - Edit only files under ${componentRoot}.
 - Keep section.manifest.json accurate, including ownedFiles and CMS bindings.
+- Use the referenced screenshots, visual diffs, and accessibility reports as evidence when present.
 - Do not commit, merge, rebase, or edit shared project files. The harness owns Git and integration.`;
 }

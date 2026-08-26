@@ -15,6 +15,7 @@ export default defineConfig({
       "@foundry/project-inspector": fromRoot("./packages/project-inspector/src/index.ts"),
       "@foundry/provider-claude": fromRoot("./packages/provider-claude/src/index.ts"),
       "@foundry/provider-codex": fromRoot("./packages/provider-codex/src/index.ts"),
+      "@foundry/quality": fromRoot("./packages/quality/src/index.ts"),
       "@foundry/verifier": fromRoot("./packages/verifier/src/index.ts"),
       "@foundry/worktrees": fromRoot("./packages/worktrees/src/index.ts"),
     },

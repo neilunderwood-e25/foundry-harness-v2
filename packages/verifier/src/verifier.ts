@@ -22,10 +22,22 @@ export interface ComponentVerificationInput {
   readonly worktree: WorktreeHandle;
   readonly changedFiles: readonly ChangedFile[];
   readonly attempt: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface QualityGateVerifier {
+  verify(input: {
+    request: BatchDeliveryRequest;
+    specification: ComponentBuildSpec;
+    worktree: WorktreeHandle;
+    attempt: number;
+    signal?: AbortSignal;
+  }): Promise<VerificationGate[]>;
 }
 
 export interface ComponentVerifierOptions {
   readonly commandRunner?: CommandRunner;
+  readonly qualityVerifier?: QualityGateVerifier;
   readonly clock?: () => Date;
 }
 
@@ -248,10 +260,12 @@ export async function verifyProjectCommands(
 
 export class ComponentVerifier {
   readonly #runner: CommandRunner;
+  readonly #qualityVerifier: QualityGateVerifier | undefined;
   readonly #clock: () => Date;
 
   constructor(options: ComponentVerifierOptions = {}) {
     this.#runner = options.commandRunner ?? new ProcessCommandRunner();
+    this.#qualityVerifier = options.qualityVerifier;
     this.#clock = options.clock ?? (() => new Date());
   }
 
@@ -320,6 +334,30 @@ export class ComponentVerifier {
           this.#runner,
         )),
       );
+    }
+
+    if (this.#qualityVerifier) {
+      if (gates.every(({ status }) => status !== "failed")) {
+        gates.push(
+          ...(await this.#qualityVerifier.verify({
+            request: input.request,
+            specification: input.specification,
+            worktree: input.worktree,
+            attempt: input.attempt,
+            ...(input.signal ? { signal: input.signal } : {}),
+          })),
+        );
+      } else if (input.request.quality.enabled) {
+        gates.push(
+          gate(
+            "quality",
+            "Visual and accessibility QA",
+            "visual",
+            "skipped",
+            "Code or runtime gates failed first",
+          ),
+        );
+      }
     }
 
     return VerificationReportSchema.parse({

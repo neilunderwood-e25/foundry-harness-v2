@@ -60,3 +60,13 @@ node apps/cli/dist/index.js batch deliver /absolute/path/to/delivery.json
 
 See [verified delivery](docs/verified-delivery.md) for the gates, repair policy, generated files, and
 integration guarantees.
+
+## Visual quality
+
+Milestone 5 adds opt-in desktop/mobile pixel comparison against the exact Figma frames,
+intermediate-width reflow checks, and axe accessibility analysis. Screenshots, diffs, references,
+logs, and accessibility reports are retained outside the target repository and attached to the
+verification gates that drive agent repairs.
+
+See [visual quality](docs/visual-quality.md) for preview-route requirements, Figma authentication,
+Chromium setup, thresholds, and artifacts.

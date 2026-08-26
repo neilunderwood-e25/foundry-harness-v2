@@ -136,7 +136,17 @@ function report(componentId: string, attempt: number): VerificationReport {
         category: "data",
         status: passed ? "passed" : "failed",
         detail: passed ? "fixed" : "ownedFiles is incomplete",
-        artifacts: [],
+        artifacts: passed
+          ? []
+          : [
+              {
+                artifactId: `delivery-1:${componentId}:1:diff`,
+                kind: "visual-diff",
+                path: `/tmp/artifacts/${componentId}/diff.png`,
+                mediaType: "image/png",
+                createdAt: new Date().toISOString(),
+              },
+            ],
       },
     ],
   });
@@ -204,11 +214,13 @@ class FakeIntegrator implements DeliveryIntegrator {
 describe("batch delivery pipeline", () => {
   it("repairs failed gates in the same sessions, commits passed jobs, and integrates once", async () => {
     const sessions: Array<string | undefined> = [];
+    const artifactDirectories: string[][] = [];
     const provider: AgentProvider = {
       name: "codex",
       capabilities: { streaming: true, sessions: true, toolEvents: true, cancellation: true },
       async execute(input) {
         sessions.push(input.sessionId);
+        artifactDirectories.push([...(input.additionalReadDirectories ?? [])]);
         return {
           status: "completed",
           ...(input.sessionId ? { sessionId: input.sessionId } : {}),
@@ -233,10 +245,58 @@ describe("batch delivery pipeline", () => {
       true,
     );
     expect(sessions.sort()).toEqual(["session-cards", "session-hero"]);
+    expect(artifactDirectories.sort()).toEqual([["/tmp/artifacts/cards"], ["/tmp/artifacts/hero"]]);
     expect(result.integration?.componentCommits).toEqual(["c".repeat(40), "d".repeat(40)]);
     expect(events.map(({ sequence }) => sequence)).toEqual(
       Array.from({ length: events.length }, (_, index) => index),
     );
     expect(events.at(-1)?.payload).toEqual({ type: "run.completed", status: "passed" });
+    expect(events.filter(({ payload }) => payload.type === "artifact.created")).toHaveLength(2);
+  });
+
+  it("does not spend repair turns on non-repairable infrastructure failures", async () => {
+    let repairs = 0;
+    const provider: AgentProvider = {
+      name: "codex",
+      capabilities: { streaming: true, sessions: true, toolEvents: true, cancellation: true },
+      async execute() {
+        repairs += 1;
+        return { status: "completed" };
+      },
+    };
+    const verifier: DeliveryVerifier = {
+      async verify(input) {
+        return VerificationReportSchema.parse({
+          schemaVersion: 1,
+          runId: input.request.batch.runId,
+          componentId: input.specification.componentId,
+          verdict: "failed",
+          attempt: input.attempt,
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          gates: [
+            {
+              id: "quality-infrastructure",
+              label: "Visual QA infrastructure",
+              category: "runtime",
+              status: "failed",
+              repairable: false,
+              detail: "FIGMA_TOKEN_MISSING",
+              artifacts: [],
+            },
+          ],
+        });
+      },
+    };
+    const result = await new BatchDeliveryPipeline({
+      providers: new AgentProviderRegistry([provider]),
+      executor: new FakeGeneration(),
+      verifier,
+      integrator: new FakeIntegrator(),
+    }).deliver(deliveryRequest());
+
+    expect(result.status).toBe("failed");
+    expect(result.jobs.every(({ status }) => status === "failed")).toBe(true);
+    expect(repairs).toBe(0);
   });
 });

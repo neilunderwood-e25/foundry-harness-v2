@@ -18,6 +18,7 @@ function request(): AgentExecutionRequest {
     } as ComponentBuildSpec,
     project: {} as ProjectProfile,
     foundation: {} as ReadyProjectFoundation,
+    additionalReadDirectories: ["/tmp/artifacts"],
   };
 }
 
@@ -77,6 +78,9 @@ describe("Claude provider", () => {
         failIfUnavailable: true,
         autoAllowBashIfSandboxed: true,
         allowUnsandboxedCommands: false,
+        filesystem: {
+          allowRead: ["/tmp/worktree", "/tmp/artifacts"],
+        },
       },
     });
     expect(emitted).toEqual([

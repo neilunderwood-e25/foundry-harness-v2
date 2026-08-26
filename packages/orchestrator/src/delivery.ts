@@ -20,7 +20,9 @@ import {
 } from "@foundry/contracts";
 import { planBatchJobs } from "@foundry/domain";
 import { GitBatchIntegrator, IntegrationError } from "@foundry/integration";
+import { VisualAccessibilityVerifier } from "@foundry/quality";
 import { ComponentVerifier, toProjectPath } from "@foundry/verifier";
+import { dirname } from "node:path";
 import { RunEventPublisher, type RunEventSink } from "./events.js";
 import { BatchExecutor, type ExecuteBatchOptions } from "./executor.js";
 
@@ -38,6 +40,7 @@ export interface DeliveryVerifier {
     worktree: WorktreeHandle;
     changedFiles: readonly ChangedFile[];
     attempt: number;
+    signal?: AbortSignal;
   }): Promise<VerificationReport>;
 }
 
@@ -100,7 +103,9 @@ export class BatchDeliveryPipeline {
   constructor(options: BatchDeliveryPipelineOptions) {
     this.#providers = options.providers;
     this.#executor = options.executor ?? new BatchExecutor({ providers: options.providers });
-    this.#verifier = options.verifier ?? new ComponentVerifier();
+    this.#verifier =
+      options.verifier ??
+      new ComponentVerifier({ qualityVerifier: new VisualAccessibilityVerifier() });
     this.#integrator = options.integrator ?? new GitBatchIntegrator();
     this.#clock = options.clock ?? (() => new Date());
   }
@@ -286,8 +291,16 @@ export class BatchDeliveryPipeline {
           worktree: executionJob.worktree,
           changedFiles,
           attempt,
+          ...(signal ? { signal } : {}),
         });
         reports.push(report);
+        for (const artifact of report.gates.flatMap(({ artifacts }) => artifacts)) {
+          await publisher.emit({
+            type: "artifact.created",
+            jobId: executionJob.jobId,
+            artifactId: artifact.artifactId,
+          });
+        }
         await publisher.emit({
           type: "verification.completed",
           jobId: executionJob.jobId,
@@ -341,7 +354,10 @@ export class BatchDeliveryPipeline {
           };
         }
 
-        if (attempt > specification.agent.maxRepairTurns) break;
+        const hasNonRepairableFailure = report.gates.some(
+          ({ status, repairable }) => status === "failed" && repairable === false,
+        );
+        if (attempt > specification.agent.maxRepairTurns || hasNonRepairableFailure) break;
         await publisher.emit({
           type: "phase.started",
           jobId: executionJob.jobId,
@@ -355,6 +371,11 @@ export class BatchDeliveryPipeline {
             specification,
             project: request.project,
             foundation: request.foundation,
+            additionalReadDirectories: [
+              ...new Set(
+                report.gates.flatMap(({ artifacts }) => artifacts.map(({ path }) => dirname(path))),
+              ),
+            ],
             ...(sessionId ? { sessionId } : {}),
             ...(signal ? { signal } : {}),
           },

@@ -28,6 +28,45 @@ export const VerificationPolicySchema = z.object({
     .default(5 * 60_000),
 });
 
+const RouteTemplateSchema = NonEmptyStringSchema.superRefine((value, context) => {
+  if (!value.startsWith("/")) {
+    context.addIssue({ code: "custom", message: "Preview route template must start with /" });
+  }
+  if (!value.includes("{slug}")) {
+    context.addIssue({ code: "custom", message: "Preview route template must include {slug}" });
+  }
+});
+
+const SelectorTemplateSchema = NonEmptyStringSchema.refine((value) => value.includes("{slug}"), {
+  message: "Preview selector template must include {slug}",
+});
+
+export const QualityPolicySchema = z.object({
+  enabled: z.boolean().default(false),
+  routeTemplate: RouteTemplateSchema.default("/qa/{slug}"),
+  selectorTemplate: SelectorTemplateSchema.default('[data-foundry="{slug}"]'),
+  maxDiffRatio: z.number().min(0).max(1).default(0.03),
+  pixelThreshold: z.number().min(0).max(1).default(0.1),
+  runAccessibility: z.boolean().default(true),
+  minimumAccessibilityImpact: z
+    .enum(["minor", "moderate", "serious", "critical"])
+    .default("serious"),
+  startupTimeoutMs: z
+    .number()
+    .int()
+    .min(1_000)
+    .max(10 * 60_000)
+    .default(90_000),
+  navigationTimeoutMs: z
+    .number()
+    .int()
+    .min(1_000)
+    .max(5 * 60_000)
+    .default(60_000),
+  figmaTokenEnv:
+    NonEmptyStringSchema.regex(/^[A-Za-z_][A-Za-z0-9_]*$/).default("FIGMA_ACCESS_TOKEN"),
+});
+
 export const BatchDeliveryRequestSchema = BatchExecutionRequestSchema.extend({
   verification: VerificationPolicySchema.default({
     installDependencies: true,
@@ -36,6 +75,18 @@ export const BatchDeliveryRequestSchema = BatchExecutionRequestSchema.extend({
     runLint: true,
     runTests: false,
     commandTimeoutMs: 5 * 60_000,
+  }),
+  quality: QualityPolicySchema.default({
+    enabled: false,
+    routeTemplate: "/qa/{slug}",
+    selectorTemplate: '[data-foundry="{slug}"]',
+    maxDiffRatio: 0.03,
+    pixelThreshold: 0.1,
+    runAccessibility: true,
+    minimumAccessibilityImpact: "serious",
+    startupTimeoutMs: 90_000,
+    navigationTimeoutMs: 60_000,
+    figmaTokenEnv: "FIGMA_ACCESS_TOKEN",
   }),
 });
 
@@ -101,6 +152,7 @@ export const BatchDeliveryResultSchema = z.object({
 });
 
 export type VerificationPolicy = z.infer<typeof VerificationPolicySchema>;
+export type QualityPolicy = z.infer<typeof QualityPolicySchema>;
 export type BatchDeliveryRequest = z.infer<typeof BatchDeliveryRequestSchema>;
 export type DeliveredComponent = z.infer<typeof DeliveredComponentSchema>;
 export type DeliveryComponentResult = z.infer<typeof DeliveryComponentResultSchema>;
