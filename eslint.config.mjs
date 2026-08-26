@@ -18,4 +18,10 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "error",
     },
   },
+  {
+    files: ["apps/console/**/*.ts", "apps/console/**/*.tsx"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
 );

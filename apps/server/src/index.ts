@@ -19,8 +19,11 @@ import { PersistenceError, SqliteRunStore } from "@foundry/persistence";
 import { inspectNextProject } from "@foundry/project-inspector";
 import { ClaudeAgentProvider } from "@foundry/provider-claude";
 import { CodexAgentProvider } from "@foundry/provider-codex";
+import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export function formatRunEventForSse(event: {
@@ -48,6 +51,11 @@ export function createServer(
       options.deliveryRunnerFactory ?? (() => new BatchDeliveryPipeline({ providers })),
   });
   const recoveredRuns = coordinator.recoverInterruptedRuns();
+  const consoleRoot = resolve("apps/console/dist");
+
+  if (existsSync(join(consoleRoot, "index.html"))) {
+    void server.register(fastifyStatic, { root: consoleRoot, prefix: "/console/" });
+  }
 
   server.addHook("onClose", async () => coordinator.close());
 
@@ -56,6 +64,8 @@ export function createServer(
     status: "ok",
     recoveredRuns: recoveredRuns.length,
   }));
+
+  server.get("/", async (_request, reply) => reply.redirect("/console/"));
 
   server.get("/api/runs", async (request, reply) => {
     const query = request.query as { limit?: string; projectId?: string };
@@ -88,6 +98,31 @@ export function createServer(
     } catch (error) {
       if (error instanceof PersistenceError && error.code === "RUN_NOT_FOUND") {
         return reply.status(404).send({ error: error.code, message: error.message });
+      }
+      throw error;
+    }
+  });
+
+  server.get("/api/runs/:runId/artifacts/:artifactId", async (request, reply) => {
+    const { runId, artifactId } = request.params as { runId: string; artifactId: string };
+    const snapshot = coordinator.getSnapshot(runId);
+    if (!snapshot) return reply.status(404).send({ error: "RUN_NOT_FOUND" });
+    const artifact = snapshot.artifacts.find((candidate) => candidate.artifactId === artifactId);
+    if (!artifact) return reply.status(404).send({ error: "ARTIFACT_NOT_FOUND" });
+    try {
+      const contents = await readFile(artifact.path);
+      const filename = basename(artifact.path).replace(/[^A-Za-z0-9._-]/g, "_");
+      return reply
+        .type(artifact.mediaType)
+        .header("content-disposition", `inline; filename="${filename}"`)
+        .send(contents);
+    } catch (error) {
+      const code = error instanceof Error && "code" in error ? error.code : undefined;
+      if (code === "ENOENT") {
+        return reply.status(404).send({
+          error: "ARTIFACT_FILE_MISSING",
+          message: "The artifact record exists, but its file is no longer available.",
+        });
       }
       throw error;
     }

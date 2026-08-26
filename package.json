@@ -13,6 +13,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "dev:server": "pnpm --filter @foundry/server dev",
+    "dev:console": "pnpm --filter @foundry/console dev",
     "quality:install-browser": "pnpm --filter @foundry/quality exec playwright install chromium",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

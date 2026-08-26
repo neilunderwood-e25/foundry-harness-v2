@@ -1,0 +1,25 @@
+{
+  "name": "@foundry/console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "dev": "vite --host 127.0.0.1 --port 4601",
+    "preview": "vite preview --host 127.0.0.1 --port 4601"
+  },
+  "dependencies": {
+    "@foundry/contracts": "workspace:*",
+    "@tanstack/react-query": "5.102.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.0",
+    "typescript": "^5.9.2",
+    "vite": "8.2.2"
+  }
+}

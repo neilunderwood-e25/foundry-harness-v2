@@ -104,3 +104,19 @@ node apps/cli/dist/index.js batch prepare /absolute/path/to/delivery.json
 
 See [structured input preparation](docs/input-preparation.md) for Contentful and Contentstack
 configuration, review gates, artifacts, and the preflight API.
+
+## Operator console
+
+Milestone 8 adds a responsive web console over the durable run control plane. Operators can launch
+delivery documents, filter and inspect run history, watch parallel component jobs and harness stages
+over SSE, cancel active runs, review failed verification gates, and open retained evidence without
+using SQLite or raw API calls.
+
+```bash
+pnpm build
+node apps/server/dist/index.js
+open http://127.0.0.1:4600/console/
+```
+
+For live console development, run `pnpm dev:server` and `pnpm dev:console` in separate terminals,
+then open `http://127.0.0.1:4601/console/`. See [operator console](docs/operator-console.md).
