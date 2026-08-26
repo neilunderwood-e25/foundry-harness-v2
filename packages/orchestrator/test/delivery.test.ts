@@ -2,6 +2,7 @@ import { AgentProviderRegistry, type AgentProvider } from "@foundry/agent-runtim
 import {
   BatchDeliveryRequestSchema,
   BatchExecutionResultSchema,
+  ArtifactRefSchema,
   VerificationReportSchema,
   type BatchDeliveryRequest,
   type ChangedFile,
@@ -18,6 +19,7 @@ import {
   type DeliveryVerifier,
   type GenerationExecutor,
 } from "../src/index.js";
+import type { InputPreparer } from "@foundry/input-preparation";
 
 const sha = "a".repeat(40);
 const fingerprint = "b".repeat(64);
@@ -298,5 +300,73 @@ describe("batch delivery pipeline", () => {
     expect(result.status).toBe("failed");
     expect(result.jobs.every(({ status }) => status === "failed")).toBe(true);
     expect(repairs).toBe(0);
+  });
+
+  it("prepares and publishes immutable inputs before the generation executor starts", async () => {
+    const phases: string[] = [];
+    let executorSawPreparedInputs = false;
+    const executor: GenerationExecutor = {
+      async execute(request) {
+        executorSawPreparedInputs = request.preparedInputs !== undefined;
+        return new FakeGeneration().execute(request);
+      },
+    };
+    const artifact = ArtifactRefSchema.parse({
+      artifactId: "delivery-1:input:design:snapshot",
+      kind: "design" as const,
+      path: "/tmp/inputs/design.json",
+      mediaType: "application/json",
+      createdAt: new Date().toISOString(),
+    });
+    const inputPreparer: InputPreparer = {
+      async prepare() {
+        phases.push("prepare");
+        return { inputs: {}, artifacts: [artifact] };
+      },
+    };
+    const request = BatchDeliveryRequestSchema.parse({
+      ...deliveryRequest(),
+      inputPreparation: {
+        enabled: true,
+        fetchSampleEntry: true,
+        failOnReview: true,
+        requestTimeoutMs: 10_000,
+        figmaTokenEnv: "FIGMA_ACCESS_TOKEN",
+      },
+    });
+    const events: RunEvent[] = [];
+    const result = await new BatchDeliveryPipeline({
+      providers: new AgentProviderRegistry([
+        {
+          name: "codex",
+          capabilities: { streaming: true, sessions: true, toolEvents: true, cancellation: true },
+          async execute(input) {
+            return {
+              status: "completed",
+              ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+            };
+          },
+        },
+      ]),
+      executor,
+      verifier: new FakeVerifier(),
+      integrator: new FakeIntegrator(),
+      inputPreparer,
+    }).deliver(request, {
+      onEvent(event) {
+        events.push(event);
+      },
+    });
+
+    expect(result.status).toBe("passed");
+    expect(phases).toEqual(["prepare"]);
+    expect(executorSawPreparedInputs).toBe(true);
+    expect(events.slice(0, 4).map(({ payload }) => payload.type)).toEqual([
+      "run.started",
+      "phase.started",
+      "artifact.created",
+      "phase.completed",
+    ]);
+    expect(events[2]?.payload).toMatchObject({ artifactId: artifact.artifactId, artifact });
   });
 });

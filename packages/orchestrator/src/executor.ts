@@ -1,4 +1,4 @@
-import { relative, sep } from "node:path";
+import { dirname, relative, sep } from "node:path";
 import {
   AgentProviderError,
   buildComponentPrompt,
@@ -198,6 +198,7 @@ export class BatchExecutor {
       await publisher.emit({ type: "phase.completed", jobId, phase: "worktree" });
 
       const provider = this.#providers.resolve(providerName);
+      const preparedInput = request.preparedInputs?.[job.specification.componentId];
       await publisher.emit({ type: "phase.started", jobId, phase: "agent" });
       const execution = await provider.execute(
         {
@@ -207,10 +208,19 @@ export class BatchExecutor {
             specification: job.specification,
             project: request.project,
             foundation: request.foundation,
+            ...(preparedInput ? { preparedInput } : {}),
           }),
           specification: job.specification,
           project: request.project,
           foundation: request.foundation,
+          ...(preparedInput ? { preparedInput } : {}),
+          ...(preparedInput
+            ? {
+                additionalReadDirectories: [
+                  ...new Set(preparedInput.artifacts.map(({ path }) => dirname(path))),
+                ],
+              }
+            : {}),
           ...(signal ? { signal } : {}),
         },
         async (event) => this.#publishAgentEvent(publisher, jobId, event),

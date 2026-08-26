@@ -70,3 +70,37 @@ verification gates that drive agent repairs.
 
 See [visual quality](docs/visual-quality.md) for preview-route requirements, Figma authentication,
 Chromium setup, thresholds, and artifacts.
+
+## Durable runs
+
+Milestone 6 adds a SQLite-backed run control plane with migrations, append-only event replay,
+background delivery, durable cancellation, restart recovery, artifact/report history, and live
+Server-Sent Events. The existing synchronous delivery interfaces remain available.
+
+```bash
+pnpm build
+node apps/server/dist/index.js
+curl -X POST http://127.0.0.1:4600/api/runs/deliver/start \
+  -H 'content-type: application/json' \
+  --data-binary @examples/batch-delivery.json
+```
+
+See [durable runs and live events](docs/durable-runs.md) for the database, API, SSE reconnection,
+cancellation, recovery, and CLI history commands.
+
+## Structured input preparation
+
+Milestone 7 resolves each Figma frame and CMS type before any agent worktree is created. It stores
+immutable screenshots, image assets, raw CMS schemas, optional sample responses, normalized design
+and CMS snapshots, a field-binding plan, and a component file plan. Agents receive those plans and
+artifact paths instead of credentials or loosely interpreted URLs.
+
+```bash
+export FIGMA_ACCESS_TOKEN=...
+export CONTENTFUL_SPACE_ID=...
+export CONTENTFUL_DELIVERY_TOKEN=...
+node apps/cli/dist/index.js batch prepare /absolute/path/to/delivery.json
+```
+
+See [structured input preparation](docs/input-preparation.md) for Contentful and Contentstack
+configuration, review gates, artifacts, and the preflight API.

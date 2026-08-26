@@ -6,6 +6,8 @@
       "@foundry/agent-runtime": ["../agent-runtime/src/index.ts"],
       "@foundry/contracts": ["../contracts/src/index.ts"],
       "@foundry/domain": ["../domain/src/index.ts"],
+      "@foundry/input-preparation": ["../input-preparation/src/index.ts"],
+      "@foundry/persistence": ["../persistence/src/index.ts"],
       "@foundry/worktrees": ["../worktrees/src/index.ts"]
     }
   },

@@ -5,5 +5,7 @@ export * from "./execution.js";
 export * from "./foundation-setup.js";
 export * from "./inspection.js";
 export * from "./output.js";
+export * from "./preparation.js";
 export * from "./project.js";
+export * from "./runs.js";
 export * from "./shared.js";

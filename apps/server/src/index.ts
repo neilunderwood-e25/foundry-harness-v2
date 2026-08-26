@@ -8,25 +8,152 @@ import {
   ProjectInspectionRequestSchema,
 } from "@foundry/contracts";
 import { inspectProjectFoundation, setupProjectFoundation } from "@foundry/foundation";
-import { BatchDeliveryPipeline, BatchExecutor } from "@foundry/orchestrator";
+import { BatchInputPreparer } from "@foundry/input-preparation";
+import {
+  BatchDeliveryPipeline,
+  BatchExecutor,
+  DurableRunCoordinator,
+  type DurableDeliveryRunner,
+} from "@foundry/orchestrator";
+import { PersistenceError, SqliteRunStore } from "@foundry/persistence";
 import { inspectNextProject } from "@foundry/project-inspector";
 import { ClaudeAgentProvider } from "@foundry/provider-claude";
 import { CodexAgentProvider } from "@foundry/provider-codex";
 import Fastify from "fastify";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+export function formatRunEventForSse(event: {
+  sequence: number;
+  payload: { type: string };
+}): string {
+  return `id: ${event.sequence}\nevent: ${event.payload.type}\ndata: ${JSON.stringify(event)}\n\n`;
+}
+
 export function createServer(
-  options: { logger?: boolean; providers?: readonly AgentProvider[] } = {},
+  options: {
+    logger?: boolean;
+    providers?: readonly AgentProvider[];
+    databasePath?: string;
+    deliveryRunnerFactory?: () => DurableDeliveryRunner;
+  } = {},
 ) {
   const server = Fastify({ logger: options.logger ?? true });
   const providers = new AgentProviderRegistry(
     options.providers ?? [new CodexAgentProvider(), new ClaudeAgentProvider()],
   );
+  const coordinator = new DurableRunCoordinator({
+    repository: new SqliteRunStore({ databasePath: options.databasePath ?? ":memory:" }),
+    deliveryRunnerFactory:
+      options.deliveryRunnerFactory ?? (() => new BatchDeliveryPipeline({ providers })),
+  });
+  const recoveredRuns = coordinator.recoverInterruptedRuns();
+
+  server.addHook("onClose", async () => coordinator.close());
 
   server.get("/health", async () => ({
     name: "foundry-harness-v2",
     status: "ok",
+    recoveredRuns: recoveredRuns.length,
   }));
+
+  server.get("/api/runs", async (request, reply) => {
+    const query = request.query as { limit?: string; projectId?: string };
+    const limit = query.limit === undefined ? 50 : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      return reply.status(400).send({ error: "INVALID_LIMIT" });
+    }
+    return coordinator.listRuns({
+      limit,
+      ...(query.projectId ? { projectId: query.projectId } : {}),
+    });
+  });
+
+  server.get("/api/runs/:runId", async (request, reply) => {
+    const { runId } = request.params as { runId: string };
+    const snapshot = coordinator.getSnapshot(runId);
+    if (!snapshot) return reply.status(404).send({ error: "RUN_NOT_FOUND" });
+    return snapshot;
+  });
+
+  server.get("/api/runs/:runId/events", async (request, reply) => {
+    const { runId } = request.params as { runId: string };
+    const query = request.query as { after?: string };
+    const after = query.after === undefined ? -1 : Number(query.after);
+    if (!Number.isInteger(after) || after < -1) {
+      return reply.status(400).send({ error: "INVALID_SEQUENCE" });
+    }
+    try {
+      return coordinator.listEvents(runId, after);
+    } catch (error) {
+      if (error instanceof PersistenceError && error.code === "RUN_NOT_FOUND") {
+        return reply.status(404).send({ error: error.code, message: error.message });
+      }
+      throw error;
+    }
+  });
+
+  server.get("/api/runs/:runId/events/stream", async (request, reply) => {
+    const { runId } = request.params as { runId: string };
+    if (!coordinator.getRun(runId)) return reply.status(404).send({ error: "RUN_NOT_FOUND" });
+    const query = request.query as { after?: string };
+    const header = request.headers["last-event-id"];
+    const after = Number(query.after ?? header ?? -1);
+    if (!Number.isInteger(after) || after < -1) {
+      return reply.status(400).send({ error: "INVALID_SEQUENCE" });
+    }
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    reply.raw.write("retry: 3000\n\n");
+    const unsubscribe = coordinator.subscribe(runId, after, (event) => {
+      reply.raw.write(formatRunEventForSse(event));
+    });
+    const heartbeat = setInterval(() => reply.raw.write(": heartbeat\n\n"), 15_000);
+    request.raw.once("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+    return reply;
+  });
+
+  server.post("/api/runs/:runId/cancel", async (request, reply) => {
+    const { runId } = request.params as { runId: string };
+    try {
+      const result = coordinator.cancel(runId);
+      return reply.status(result.accepted ? 202 : 409).send(result);
+    } catch (error) {
+      if (error instanceof PersistenceError && error.code === "RUN_NOT_FOUND") {
+        return reply.status(404).send({ error: error.code, message: error.message });
+      }
+      throw error;
+    }
+  });
+
+  server.post("/api/runs/deliver/start", async (request, reply) => {
+    const input = BatchDeliveryRequestSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({ error: "INVALID_REQUEST", issues: input.error.issues });
+    }
+    try {
+      const run = coordinator.startDelivery(input.data);
+      return reply.status(202).send({
+        run,
+        statusUrl: `/api/runs/${run.runId}`,
+        eventsUrl: `/api/runs/${run.runId}/events/stream`,
+      });
+    } catch (error) {
+      if (error instanceof PersistenceError && error.code === "RUN_ALREADY_EXISTS") {
+        return reply.status(409).send({ error: error.code, message: error.message });
+      }
+      throw error;
+    }
+  });
 
   server.post("/api/specifications/validate", async (request, reply) => {
     const result = ComponentBuildSpecSchema.safeParse(request.body);
@@ -111,6 +238,25 @@ export function createServer(
     }
   });
 
+  server.post("/api/inputs/prepare", async (request, reply) => {
+    const parsed = BatchDeliveryRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "INVALID_REQUEST", issues: parsed.error.issues });
+    }
+    try {
+      const input = BatchDeliveryRequestSchema.parse({
+        ...parsed.data,
+        inputPreparation: { ...parsed.data.inputPreparation, enabled: true },
+      });
+      return await new BatchInputPreparer().prepare(input);
+    } catch (error) {
+      return reply.status(409).send({
+        error: "INPUT_PREPARATION_FAILED",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   server.post("/api/runs/deliver", async (request, reply) => {
     const input = BatchDeliveryRequestSchema.safeParse(request.body);
     if (!input.success) {
@@ -138,7 +284,8 @@ export function createServer(
 
 async function main(): Promise<void> {
   const port = Number(process.env["PORT"] ?? 4600);
-  const server = createServer();
+  const databasePath = process.env["FOUNDRY_DATABASE_PATH"] ?? resolve(".foundry/state.sqlite");
+  const server = createServer({ databasePath });
   await server.listen({ host: "127.0.0.1", port });
 }
 

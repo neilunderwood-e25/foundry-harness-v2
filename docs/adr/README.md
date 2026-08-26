@@ -8,3 +8,5 @@ silently rewritten.
 - [0003 — Frozen project foundation](0003-project-foundation.md)
 - [0004 — Worktree isolation and serial integration](0004-worktrees-and-integration.md)
 - [0005 — Adapter-based visual quality gates](0005-visual-quality.md)
+- [0006 — SQLite-backed durable run control plane](0006-durable-run-control-plane.md)
+- [0007 — Provider-neutral structured input preparation](0007-structured-input-preparation.md)

@@ -5,6 +5,7 @@ import {
   WorktreeHandleSchema,
 } from "./execution.js";
 import { VerificationReportSchema } from "./output.js";
+import { InputPreparationPolicySchema } from "./preparation.js";
 import {
   ComponentIdSchema,
   JobIdSchema,
@@ -68,6 +69,13 @@ export const QualityPolicySchema = z.object({
 });
 
 export const BatchDeliveryRequestSchema = BatchExecutionRequestSchema.extend({
+  inputPreparation: InputPreparationPolicySchema.default({
+    enabled: false,
+    fetchSampleEntry: true,
+    failOnReview: true,
+    requestTimeoutMs: 60_000,
+    figmaTokenEnv: "FIGMA_ACCESS_TOKEN",
+  }),
   verification: VerificationPolicySchema.default({
     installDependencies: true,
     runBuild: true,

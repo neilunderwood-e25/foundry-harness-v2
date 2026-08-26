@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BatchBuildSpecSchema } from "./build.js";
 import { ReadyProjectFoundationSchema, ProjectProfileSchema } from "./project.js";
+import { PreparedComponentInputsSchema } from "./preparation.js";
 import {
   ComponentIdSchema,
   JobIdSchema,
@@ -77,6 +78,7 @@ export const BatchExecutionRequestSchema = z.object({
   foundation: ReadyProjectFoundationSchema,
   batch: BatchBuildSpecSchema,
   worktreeRoot: NonEmptyStringSchema,
+  preparedInputs: PreparedComponentInputsSchema.optional(),
 });
 
 export type AgentProviderName = z.infer<typeof AgentProviderNameSchema>;

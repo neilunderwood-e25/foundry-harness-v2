@@ -3,6 +3,7 @@ import type {
   AgentProviderName,
   ComponentBuildSpec,
   ProjectProfile,
+  PreparedComponentInput,
   ReadyProjectFoundation,
 } from "@foundry/contracts";
 
@@ -27,6 +28,7 @@ export interface AgentExecutionRequest {
   readonly specification: ComponentBuildSpec;
   readonly project: ProjectProfile;
   readonly foundation: ReadyProjectFoundation;
+  readonly preparedInput?: PreparedComponentInput;
   readonly sessionId?: string;
   readonly additionalReadDirectories?: readonly string[];
   readonly signal?: AbortSignal;

@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "schemaVersion": 1,
+    "projectId": "example-project",
+    "rootDir": "/absolute/path/to/next-project",
+    "inspectedCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "framework": {
+      "kind": "nextjs",
+      "router": "app",
+      "appDir": "src/app"
+    },
+    "packageManager": "pnpm",
+    "commands": {
+      "install": { "executable": "pnpm", "args": ["install"] },
+      "build": { "executable": "pnpm", "args": ["build"] },
+      "typecheck": { "executable": "pnpm", "args": ["typecheck"] },
+      "lint": { "executable": "pnpm", "args": ["lint"] },
+      "dev": { "executable": "pnpm", "args": ["dev"] }
+    },
+    "paths": {
+      "sectionRoot": "src/components/sections",
+      "registry": "src/components/sections/registry.ts",
+      "pageQuery": "src/lib/graphql/queries/page.ts",
+      "graphqlFragments": "src/lib/graphql/fragments"
+    },
+    "cms": "contentful"
+  },
+  "foundation": {
+    "schemaVersion": 1,
+    "projectId": "example-project",
+    "status": "ready",
+    "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "reasons": [],
+    "styleGuide": {
+      "source": "existing",
+      "files": ["src/styles/tokens.css"],
+      "colors": [],
+      "spacing": [],
+      "typography": [],
+      "breakpoints": {},
+      "primitives": []
+    },
+    "container": {
+      "source": "existing",
+      "componentPath": "src/components/ui/Container.tsx",
+      "importPath": "@/components/ui/Container",
+      "desktopMaxWidth": "fluid",
+      "mobileMaxWidth": "fluid",
+      "paddingByBreakpoint": {},
+      "supportsFullBleed": false,
+      "supportedProps": ["children"]
+    }
+  },
+  "batch": {
+    "schemaVersion": 1,
+    "runId": "example-delivery-1",
+    "projectId": "example-project",
+    "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "foundationFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "maxParallel": 2,
+    "components": [
+      {
+        "schemaVersion": 1,
+        "runId": "example-delivery-1",
+        "componentId": "hero",
+        "projectId": "example-project",
+        "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "foundationFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "name": "Hero",
+        "slug": "hero",
+        "design": {
+          "desktopFrameUrl": "https://figma.com/design/example/Foundry?node-id=1-1",
+          "mobileFrameUrl": "https://figma.com/design/example/Foundry?node-id=1-2"
+        },
+        "cms": {
+          "provider": "contentful",
+          "contentType": "HeroSection",
+          "variantField": "frontendComponent",
+          "variantValue": "hero"
+        },
+        "agent": { "provider": "codex", "maxRepairTurns": 3 }
+      },
+      {
+        "schemaVersion": 1,
+        "runId": "example-delivery-1",
+        "componentId": "cards",
+        "projectId": "example-project",
+        "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "foundationFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "name": "Cards",
+        "slug": "cards",
+        "design": {
+          "desktopFrameUrl": "https://figma.com/design/example/Foundry?node-id=2-1",
+          "mobileFrameUrl": "https://figma.com/design/example/Foundry?node-id=2-2"
+        },
+        "cms": {
+          "provider": "contentful",
+          "contentType": "CardsSection",
+          "variantField": "frontendComponent",
+          "variantValue": "cards"
+        },
+        "agent": { "provider": "claude", "maxRepairTurns": 3 }
+      }
+    ]
+  },
+  "worktreeRoot": "/absolute/path/to/foundry-worktrees",
+  "inputPreparation": {
+    "enabled": true,
+    "outputRoot": "/absolute/path/to/foundry-inputs",
+    "fetchSampleEntry": true,
+    "failOnReview": true,
+    "requestTimeoutMs": 60000,
+    "figmaTokenEnv": "FIGMA_ACCESS_TOKEN"
+  },
+  "verification": {
+    "installDependencies": true,
+    "runBuild": true,
+    "runTypecheck": true,
+    "runLint": true,
+    "runTests": false,
+    "commandTimeoutMs": 300000
+  },
+  "quality": {
+    "enabled": false,
+    "routeTemplate": "/qa/{slug}",
+    "selectorTemplate": "[data-foundry=\"{slug}\"]",
+    "maxDiffRatio": 0.03,
+    "pixelThreshold": 0.1,
+    "runAccessibility": true,
+    "minimumAccessibilityImpact": "serious",
+    "startupTimeoutMs": 90000,
+    "navigationTimeoutMs": 60000,
+    "figmaTokenEnv": "FIGMA_ACCESS_TOKEN"
+  }
+}

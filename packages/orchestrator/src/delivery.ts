@@ -20,6 +20,7 @@ import {
 } from "@foundry/contracts";
 import { planBatchJobs } from "@foundry/domain";
 import { GitBatchIntegrator, IntegrationError } from "@foundry/integration";
+import { createEnvironmentInputPreparer, type InputPreparer } from "@foundry/input-preparation";
 import { VisualAccessibilityVerifier } from "@foundry/quality";
 import { ComponentVerifier, toProjectPath } from "@foundry/verifier";
 import { dirname } from "node:path";
@@ -63,6 +64,7 @@ export interface BatchDeliveryPipelineOptions {
   readonly verifier?: DeliveryVerifier;
   readonly integrator?: DeliveryIntegrator;
   readonly clock?: () => Date;
+  readonly inputPreparer?: InputPreparer;
 }
 
 export interface DeliverBatchOptions {
@@ -99,6 +101,7 @@ export class BatchDeliveryPipeline {
   readonly #verifier: DeliveryVerifier;
   readonly #integrator: DeliveryIntegrator;
   readonly #clock: () => Date;
+  readonly #inputPreparer: InputPreparer;
 
   constructor(options: BatchDeliveryPipelineOptions) {
     this.#providers = options.providers;
@@ -108,13 +111,14 @@ export class BatchDeliveryPipeline {
       new ComponentVerifier({ qualityVerifier: new VisualAccessibilityVerifier() });
     this.#integrator = options.integrator ?? new GitBatchIntegrator();
     this.#clock = options.clock ?? (() => new Date());
+    this.#inputPreparer = options.inputPreparer ?? createEnvironmentInputPreparer();
   }
 
   async deliver(
     input: BatchDeliveryRequest,
     options: DeliverBatchOptions = {},
   ): Promise<BatchDeliveryResult> {
-    const request = BatchDeliveryRequestSchema.parse(input);
+    let request = BatchDeliveryRequestSchema.parse(input);
     const startedAt = this.#clock().toISOString();
     const publisher = new RunEventPublisher(
       request.batch.runId,
@@ -122,10 +126,29 @@ export class BatchDeliveryPipeline {
       this.#clock,
     );
 
+    await publisher.emit({ type: "run.started" });
+    if (request.inputPreparation.enabled) {
+      await publisher.emit({ type: "phase.started", phase: "input-preparation" });
+      const prepared = await this.#inputPreparer.prepare(request, options.signal);
+      request = BatchDeliveryRequestSchema.parse({ ...request, preparedInputs: prepared.inputs });
+      const emitted = new Set<string>();
+      for (const artifact of prepared.artifacts) {
+        if (emitted.has(artifact.artifactId)) continue;
+        emitted.add(artifact.artifactId);
+        await publisher.emit({
+          type: "artifact.created",
+          artifactId: artifact.artifactId,
+          artifact,
+        });
+      }
+      await publisher.emit({ type: "phase.completed", phase: "input-preparation" });
+    }
+
     const execution = await this.#executor.execute(request, {
       ...(options.signal ? { signal: options.signal } : {}),
       onEvent: async (event) => {
         if (
+          event.payload.type !== "run.started" &&
           event.payload.type !== "run.completed" &&
           event.payload.type !== "run.cancelled" &&
           event.payload.type !== "job.completed"
@@ -299,6 +322,7 @@ export class BatchDeliveryPipeline {
             type: "artifact.created",
             jobId: executionJob.jobId,
             artifactId: artifact.artifactId,
+            artifact,
           });
         }
         await publisher.emit({
@@ -371,10 +395,18 @@ export class BatchDeliveryPipeline {
             specification,
             project: request.project,
             foundation: request.foundation,
+            ...(request.preparedInputs?.[specification.componentId]
+              ? { preparedInput: request.preparedInputs[specification.componentId] }
+              : {}),
             additionalReadDirectories: [
-              ...new Set(
-                report.gates.flatMap(({ artifacts }) => artifacts.map(({ path }) => dirname(path))),
-              ),
+              ...new Set([
+                ...report.gates.flatMap(({ artifacts }) =>
+                  artifacts.map(({ path }) => dirname(path)),
+                ),
+                ...(request.preparedInputs?.[specification.componentId]?.artifacts.map(({ path }) =>
+                  dirname(path),
+                ) ?? []),
+              ]),
             ],
             ...(sessionId ? { sessionId } : {}),
             ...(signal ? { signal } : {}),

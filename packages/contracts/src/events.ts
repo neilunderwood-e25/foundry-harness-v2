@@ -7,9 +7,11 @@ import {
   NonEmptyStringSchema,
   RunIdSchema,
 } from "./shared.js";
+import { ArtifactRefSchema } from "./output.js";
 
 const RunEventPayloadSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("run.started") }),
+  z.object({ type: z.literal("run.interrupted"), reason: NonEmptyStringSchema }),
   z.object({ type: z.literal("run.cancelled"), reason: NonEmptyStringSchema }),
   z.object({
     type: z.literal("run.completed"),
@@ -65,6 +67,7 @@ const RunEventPayloadSchema = z.discriminatedUnion("type", [
     type: z.literal("artifact.created"),
     jobId: JobIdSchema.optional(),
     artifactId: ArtifactIdSchema,
+    artifact: ArtifactRefSchema.optional(),
   }),
 ]);
 

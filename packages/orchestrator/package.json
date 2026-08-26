@@ -20,11 +20,13 @@
     "@foundry/contracts": "workspace:*",
     "@foundry/domain": "workspace:*",
     "@foundry/integration": "workspace:*",
+    "@foundry/input-preparation": "workspace:*",
     "@foundry/quality": "workspace:*",
     "@foundry/verifier": "workspace:*",
     "@foundry/worktrees": "workspace:*"
   },
   "devDependencies": {
+    "@foundry/persistence": "workspace:*",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2"
   }

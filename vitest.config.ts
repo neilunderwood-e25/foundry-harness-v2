@@ -7,11 +7,18 @@ export default defineConfig({
   resolve: {
     alias: {
       "@foundry/contracts": fromRoot("./packages/contracts/src/index.ts"),
+      "@foundry/cms-core": fromRoot("./packages/cms-core/src/index.ts"),
+      "@foundry/cms-contentful": fromRoot("./packages/cms-contentful/src/index.ts"),
+      "@foundry/cms-contentstack": fromRoot("./packages/cms-contentstack/src/index.ts"),
       "@foundry/agent-runtime": fromRoot("./packages/agent-runtime/src/index.ts"),
       "@foundry/domain": fromRoot("./packages/domain/src/index.ts"),
+      "@foundry/design": fromRoot("./packages/design/src/index.ts"),
       "@foundry/foundation": fromRoot("./packages/foundation/src/index.ts"),
       "@foundry/integration": fromRoot("./packages/integration/src/index.ts"),
+      "@foundry/input-core": fromRoot("./packages/input-core/src/index.ts"),
+      "@foundry/input-preparation": fromRoot("./packages/input-preparation/src/index.ts"),
       "@foundry/orchestrator": fromRoot("./packages/orchestrator/src/index.ts"),
+      "@foundry/persistence": fromRoot("./packages/persistence/src/index.ts"),
       "@foundry/project-inspector": fromRoot("./packages/project-inspector/src/index.ts"),
       "@foundry/provider-claude": fromRoot("./packages/provider-claude/src/index.ts"),
       "@foundry/provider-codex": fromRoot("./packages/provider-codex/src/index.ts"),
