@@ -22,6 +22,7 @@
     "@foundry/integration": "workspace:*",
     "@foundry/input-preparation": "workspace:*",
     "@foundry/quality": "workspace:*",
+    "@foundry/security": "workspace:*",
     "@foundry/verifier": "workspace:*",
     "@foundry/worktrees": "workspace:*"
   },

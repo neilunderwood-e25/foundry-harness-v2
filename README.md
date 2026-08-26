@@ -120,3 +120,28 @@ open http://127.0.0.1:4600/console/
 
 For live console development, run `pnpm dev:server` and `pnpm dev:console` in separate terminals,
 then open `http://127.0.0.1:4601/console/`. See [operator console](docs/operator-console.md).
+
+## Project workspaces
+
+Milestone 9 makes inspected projects durable before their first delivery. The console **Projects**
+workspace registers Next.js repositories, shows their detected conventions, Style Guide and
+Container profiles, and refreshes readiness without silently accepting changed foundation files.
+The same operations are available through the API and `foundry project add|list|show|refresh`.
+
+See [project workspaces](docs/project-workspaces.md) for the workflow and commands.
+
+## Production hardening
+
+Milestone 10 adds release evaluation reports, provider comparisons, secret redaction before durable
+storage, sanitized diagnostics bundles, and a headless CI verdict. The console **Insights** workspace
+shows quality thresholds across run success, first-turn generation, repairs, visual parity,
+accessibility, runtime, and integration conflicts.
+
+```bash
+pnpm build
+node apps/cli/dist/index.js evaluate .foundry/state.sqlite examples/evaluation-policy.json
+node apps/cli/dist/index.js run diagnostics <run-id>
+```
+
+See [production hardening](docs/production-hardening.md) for the security boundary, evaluation
+metrics, CI behavior, and diagnostics policy.

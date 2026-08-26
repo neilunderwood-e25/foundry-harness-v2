@@ -5,6 +5,8 @@
     "paths": {
       "@foundry/agent-runtime": ["../../packages/agent-runtime/src/index.ts"],
       "@foundry/contracts": ["../../packages/contracts/src/index.ts"],
+      "@foundry/diagnostics": ["../../packages/diagnostics/src/index.ts"],
+      "@foundry/evaluation": ["../../packages/evaluation/src/index.ts"],
       "@foundry/foundation": ["../../packages/foundation/src/index.ts"],
       "@foundry/input-preparation": ["../../packages/input-preparation/src/index.ts"],
       "@foundry/orchestrator": ["../../packages/orchestrator/src/index.ts"],
@@ -12,6 +14,7 @@
       "@foundry/project-inspector": ["../../packages/project-inspector/src/index.ts"],
       "@foundry/provider-claude": ["../../packages/provider-claude/src/index.ts"],
       "@foundry/provider-codex": ["../../packages/provider-codex/src/index.ts"],
+      "@foundry/security": ["../../packages/security/src/index.ts"],
       "@foundry/worktrees": ["../../packages/worktrees/src/index.ts"]
     }
   },

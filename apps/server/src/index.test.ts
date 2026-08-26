@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import specification from "../../../examples/component-build-spec.json" with { type: "json" };
 import delivery from "../../../examples/batch-delivery.json" with { type: "json" };
 import {
@@ -157,6 +157,71 @@ describe("server", () => {
     await server.close();
   });
 
+  it("registers, lists, reads, and refreshes project workspaces", async () => {
+    const server = createServer({ logger: false });
+    const rootDir = resolve("fixtures/next-app-ready");
+    const registered = await server.inject({
+      method: "POST",
+      url: "/api/projects/register",
+      payload: { rootDir, projectId: "console-project" },
+    });
+    expect(registered.statusCode).toBe(201);
+    expect(registered.json()).toMatchObject({
+      projectId: "console-project",
+      rootDir,
+      profile: { framework: { kind: "nextjs" } },
+      foundation: { status: "ready" },
+    });
+
+    const list = await server.inject({ method: "GET", url: "/api/projects" });
+    expect(list.json()).toMatchObject([{ projectId: "console-project" }]);
+    const detail = await server.inject({
+      method: "GET",
+      url: "/api/projects/console-project",
+    });
+    expect(detail.statusCode).toBe(200);
+
+    const refreshed = await server.inject({
+      method: "POST",
+      url: "/api/projects/console-project/refresh",
+      payload: {},
+    });
+    expect(refreshed.statusCode).toBe(200);
+    expect(refreshed.json()).toMatchObject({ projectId: "console-project" });
+    const missing = await server.inject({
+      method: "POST",
+      url: "/api/projects/not-registered/refresh",
+      payload: {},
+    });
+    expect(missing.statusCode).toBe(404);
+    await server.close();
+  });
+
+  it("returns a path from the native project directory picker", async () => {
+    const server = createServer({
+      logger: false,
+      directoryPicker: async () => "/Users/example/project",
+    });
+    const selected = await server.inject({
+      method: "POST",
+      url: "/api/system/select-directory",
+    });
+    expect(selected.statusCode).toBe(200);
+    expect(selected.json()).toEqual({ cancelled: false, path: "/Users/example/project" });
+    await server.close();
+  });
+
+  it("reports cancellation from the native project directory picker", async () => {
+    const server = createServer({ logger: false, directoryPicker: async () => undefined });
+    const selected = await server.inject({
+      method: "POST",
+      url: "/api/system/select-directory",
+    });
+    expect(selected.statusCode).toBe(200);
+    expect(selected.json()).toEqual({ cancelled: true });
+    await server.close();
+  });
+
   it("validates batch execution requests before starting providers", async () => {
     const server = createServer({ logger: false });
     const response = await server.inject({
@@ -213,6 +278,28 @@ describe("server", () => {
       url: "/api/runs/example-delivery-1/events?after=0",
     });
     expect(events.json()).toMatchObject([{ sequence: 1 }]);
+
+    const diagnostics = await server.inject({
+      method: "GET",
+      url: "/api/runs/example-delivery-1/diagnostics",
+    });
+    expect(diagnostics.statusCode).toBe(200);
+    expect(diagnostics.headers["content-disposition"]).toContain("diagnostics.json");
+    expect(diagnostics.json()).toMatchObject({
+      schemaVersion: 1,
+      policy: { secretsRedacted: true, artifactContentsIncluded: false },
+      snapshot: { run: { runId: "example-delivery-1" } },
+    });
+
+    const evaluation = await server.inject({
+      method: "GET",
+      url: "/api/evaluations/summary",
+    });
+    expect(evaluation.statusCode).toBe(200);
+    expect(evaluation.json()).toMatchObject({
+      verdict: "passed",
+      metrics: { runs: 1, passedRuns: 1, runPassRate: 1 },
+    });
 
     const duplicate = await server.inject({
       method: "POST",

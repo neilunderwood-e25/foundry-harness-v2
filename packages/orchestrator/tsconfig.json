@@ -8,6 +8,7 @@
       "@foundry/domain": ["../domain/src/index.ts"],
       "@foundry/input-preparation": ["../input-preparation/src/index.ts"],
       "@foundry/persistence": ["../persistence/src/index.ts"],
+      "@foundry/security": ["../security/src/index.ts"],
       "@foundry/worktrees": ["../worktrees/src/index.ts"]
     }
   },

@@ -5,6 +5,9 @@ import {
   DurableJobSchema,
   DurableRunSchema,
   DurableRunSnapshotSchema,
+  ProjectFoundationSchema,
+  ProjectProfileSchema,
+  RegisteredProjectSchema,
   RunEventSchema,
   VerificationReportSchema,
   WorkflowStepSchema,
@@ -14,12 +17,16 @@ import {
   type DurableJob,
   type DurableRun,
   type DurableRunSnapshot,
+  type ProjectFoundation,
+  type ProjectProfile,
+  type RegisteredProject,
   type RunEvent,
   type RunEventPayload,
   type RunId,
   type VerificationReport,
   type WorkflowStep,
 } from "@foundry/contracts";
+import { redactSecrets, redactText } from "@foundry/security";
 import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { mkdirSync } from "node:fs";
@@ -101,6 +108,18 @@ function runFromRow(row: typeof runs.$inferSelect): DurableRun {
   });
 }
 
+function projectFromRow(row: typeof projects.$inferSelect): RegisteredProject {
+  return RegisteredProjectSchema.parse({
+    schemaVersion: 1,
+    projectId: row.projectId,
+    rootDir: row.rootDir,
+    profile: JSON.parse(row.profileJson),
+    foundation: JSON.parse(row.foundationJson),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  });
+}
+
 function eventJobId(payload: RunEventPayload): string | null {
   return "jobId" in payload ? (payload.jobId ?? null) : null;
 }
@@ -122,8 +141,65 @@ export class SqliteRunStore {
     this.#db = drizzle({ client: this.#sqlite });
   }
 
+  saveProject(profileInput: ProjectProfile, foundationInput: ProjectFoundation): RegisteredProject {
+    const profile = ProjectProfileSchema.parse(profileInput);
+    const foundation = ProjectFoundationSchema.parse(foundationInput);
+    if (profile.projectId !== foundation.projectId) {
+      throw new PersistenceError(
+        "PROJECT_ID_MISMATCH",
+        `Profile ${profile.projectId} does not match foundation ${foundation.projectId}`,
+      );
+    }
+    const now = this.#clock().toISOString();
+    this.#db
+      .insert(projects)
+      .values({
+        projectId: profile.projectId,
+        rootDir: profile.rootDir,
+        profileJson: json(profile),
+        foundationJson: json(foundation),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: projects.projectId,
+        set: {
+          rootDir: profile.rootDir,
+          profileJson: json(profile),
+          foundationJson: json(foundation),
+          updatedAt: now,
+        },
+      })
+      .run();
+    return this.requireProject(profile.projectId);
+  }
+
+  getProject(projectId: string): RegisteredProject | undefined {
+    const row = this.#db.select().from(projects).where(eq(projects.projectId, projectId)).get();
+    return row ? projectFromRow(row) : undefined;
+  }
+
+  requireProject(projectId: string): RegisteredProject {
+    const project = this.getProject(projectId);
+    if (!project) {
+      throw new PersistenceError("PROJECT_NOT_FOUND", `Project ${projectId} was not found`);
+    }
+    return project;
+  }
+
+  listProjects(options: { limit?: number } = {}): RegisteredProject[] {
+    const limit = Math.min(Math.max(options.limit ?? 100, 1), 200);
+    return this.#db
+      .select()
+      .from(projects)
+      .orderBy(desc(projects.updatedAt))
+      .limit(limit)
+      .all()
+      .map(projectFromRow);
+  }
+
   createDeliveryRun(input: BatchDeliveryRequest): DurableRun {
-    const request = BatchDeliveryRequestSchema.parse(input);
+    const request = BatchDeliveryRequestSchema.parse(redactSecrets(input));
     if (this.getRun(request.batch.runId)) {
       throw new PersistenceError("RUN_ALREADY_EXISTS", `Run ${request.batch.runId} already exists`);
     }
@@ -202,7 +278,7 @@ export class SqliteRunStore {
   }
 
   appendEvent(input: RunEvent): RunEvent {
-    const event = RunEventSchema.parse(input);
+    const event = RunEventSchema.parse(redactSecrets(input));
     this.#db.transaction((transaction) => {
       const duplicate = transaction
         .select({
@@ -317,7 +393,7 @@ export class SqliteRunStore {
       .set({
         status: "failed",
         errorCode: code,
-        errorMessage: message,
+        errorMessage: redactText(message),
         completedAt: now,
         updatedAt: now,
       })
@@ -327,7 +403,7 @@ export class SqliteRunStore {
   }
 
   recordDeliveryResult(input: BatchDeliveryResult): DurableRun {
-    const result = BatchDeliveryResultSchema.parse(input);
+    const result = BatchDeliveryResultSchema.parse(redactSecrets(input));
     const request = BatchDeliveryRequestSchema.parse(this.requireRun(result.runId).request);
     const providers = new Map(
       request.batch.components.map((component) => [

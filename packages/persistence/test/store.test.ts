@@ -117,6 +117,32 @@ afterEach(async () => {
 });
 
 describe("SQLite run store", () => {
+  it("persists registered project readiness independently of runs", async () => {
+    let time = 1_700_000_000_000;
+    const store = new SqliteRunStore({
+      databasePath: await databasePath(),
+      clock: () => new Date(time++),
+    });
+    const delivery = request();
+    const registered = store.saveProject(delivery.project, {
+      schemaVersion: 1,
+      projectId: delivery.project.projectId,
+      status: "missing",
+      reasons: ["Container component was not found"],
+    });
+
+    expect(registered.foundation.status).toBe("missing");
+    expect(store.listProjects()).toHaveLength(1);
+
+    const refreshed = store.saveProject(delivery.project, delivery.foundation);
+    expect(refreshed.foundation.status).toBe("ready");
+    expect(refreshed.createdAt).toBe(registered.createdAt);
+    expect(refreshed.updatedAt).not.toBe(registered.updatedAt);
+    expect(store.requireProject("project-1").profile.framework.kind).toBe("nextjs");
+    expect(() => store.requireProject("unknown-project")).toThrowError(PersistenceError);
+    store.close();
+  });
+
   it("persists ordered events and run state across process restarts", async () => {
     const path = await databasePath();
     const first = new SqliteRunStore({ databasePath: path });
@@ -144,6 +170,24 @@ describe("SQLite run store", () => {
       { jobId: "persisted-run:hero", status: "queued" },
     ]);
     reopened.close();
+  });
+
+  it("redacts agent output before writing durable events", async () => {
+    const store = new SqliteRunStore({ databasePath: await databasePath() });
+    store.createDeliveryRun(request());
+    store.appendEvent(event(0, { type: "run.started" }));
+    store.appendEvent(
+      event(1, {
+        type: "agent.text",
+        jobId: "persisted-run:hero",
+        text: "Authorization: Bearer abcdefghijkl",
+      }),
+    );
+    expect(store.listEvents("persisted-run")[1]?.payload).toMatchObject({
+      type: "agent.text",
+      text: "Authorization: [REDACTED]",
+    });
+    store.close();
   });
 
   it("marks active runs and workflow steps interrupted during recovery", async () => {

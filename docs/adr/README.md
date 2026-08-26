@@ -11,3 +11,5 @@ silently rewritten.
 - [0006 — SQLite-backed durable run control plane](0006-durable-run-control-plane.md)
 - [0007 — Provider-neutral structured input preparation](0007-structured-input-preparation.md)
 - [0008 — Read-only-by-default local operator console](0008-operator-console.md)
+- [0009 — Persist inspected project workspaces](0009-project-workspaces.md)
+- [0010 — Evaluation-gated production hardening](0010-production-hardening.md)

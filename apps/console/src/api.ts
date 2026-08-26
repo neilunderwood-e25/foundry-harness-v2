@@ -1,4 +1,11 @@
-import type { DurableRun, DurableRunSnapshot, RunCancellation, RunEvent } from "@foundry/contracts";
+import type {
+  DurableRun,
+  DurableRunSnapshot,
+  EvaluationReport,
+  RegisteredProject,
+  RunCancellation,
+  RunEvent,
+} from "@foundry/contracts";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -14,6 +21,40 @@ export function listRuns(projectId?: string): Promise<DurableRun[]> {
   const params = new URLSearchParams({ limit: "100" });
   if (projectId) params.set("projectId", projectId);
   return request(`/api/runs?${params}`);
+}
+
+export function listProjects(): Promise<RegisteredProject[]> {
+  return request("/api/projects");
+}
+
+export function getEvaluationReport(): Promise<EvaluationReport> {
+  return request("/api/evaluations/summary?limit=100");
+}
+
+export function selectProjectDirectory(): Promise<{ cancelled: boolean; path?: string }> {
+  return request("/api/system/select-directory", { method: "POST" });
+}
+
+export function registerProject(input: {
+  rootDir: string;
+  projectId?: string;
+}): Promise<RegisteredProject> {
+  return request("/api/projects/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function refreshProject(
+  projectId: string,
+  acceptFoundationChanges = false,
+): Promise<RegisteredProject> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/refresh`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ acceptFoundationChanges }),
+  });
 }
 
 export function getRun(runId: string): Promise<DurableRunSnapshot> {
@@ -34,6 +75,10 @@ export function cancelRun(runId: string): Promise<RunCancellation> {
 
 export function artifactUrl(runId: string, artifactId: string): string {
   return `/api/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`;
+}
+
+export function diagnosticsUrl(runId: string): string {
+  return `/api/runs/${encodeURIComponent(runId)}/diagnostics`;
 }
 
 export function subscribeToRun(

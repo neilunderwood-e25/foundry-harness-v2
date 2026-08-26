@@ -4,6 +4,7 @@ import {
   type RunEventPayload,
   type RunId,
 } from "@foundry/contracts";
+import { redactSecrets } from "@foundry/security";
 
 export type RunEventSink = (event: RunEvent) => void | Promise<void>;
 
@@ -20,7 +21,8 @@ export class RunEventPublisher {
     this.#clock = clock;
   }
 
-  emit(payload: RunEventPayload): Promise<void> {
+  emit(input: RunEventPayload): Promise<void> {
+    const payload = redactSecrets(input);
     const sequence = this.#sequence;
     this.#sequence += 1;
     const event = RunEventSchema.parse({

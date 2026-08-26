@@ -16,6 +16,7 @@
     "dev:server": "pnpm --filter @foundry/server dev",
     "dev:console": "pnpm --filter @foundry/console dev",
     "quality:install-browser": "pnpm --filter @foundry/quality exec playwright install chromium",
+    "evaluate": "node apps/cli/dist/index.js evaluate",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"

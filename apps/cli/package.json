@@ -14,12 +14,15 @@
   "dependencies": {
     "@foundry/agent-runtime": "workspace:*",
     "@foundry/contracts": "workspace:*",
+    "@foundry/diagnostics": "workspace:*",
+    "@foundry/evaluation": "workspace:*",
     "@foundry/foundation": "workspace:*",
     "@foundry/input-preparation": "workspace:*",
     "@foundry/orchestrator": "workspace:*",
     "@foundry/persistence": "workspace:*",
     "@foundry/project-inspector": "workspace:*",
     "@foundry/provider-claude": "workspace:*",
-    "@foundry/provider-codex": "workspace:*"
+    "@foundry/provider-codex": "workspace:*",
+    "@foundry/security": "workspace:*"
   }
 }

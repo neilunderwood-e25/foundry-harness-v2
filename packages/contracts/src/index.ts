@@ -1,5 +1,6 @@
 export * from "./build.js";
 export * from "./delivery.js";
+export * from "./evaluation.js";
 export * from "./events.js";
 export * from "./execution.js";
 export * from "./foundation-setup.js";
@@ -7,5 +8,6 @@ export * from "./inspection.js";
 export * from "./output.js";
 export * from "./preparation.js";
 export * from "./project.js";
+export * from "./projects.js";
 export * from "./runs.js";
 export * from "./shared.js";

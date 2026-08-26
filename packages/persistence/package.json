@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@foundry/contracts": "workspace:*",
+    "@foundry/security": "workspace:*",
     "drizzle-orm": "1.0.0-rc.4"
   },
   "devDependencies": {

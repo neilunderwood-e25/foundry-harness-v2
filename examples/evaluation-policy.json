@@ -1,0 +1,9 @@
+{
+  "minimumRuns": 5,
+  "minimumRunPassRate": 0.8,
+  "minimumComponentPassRate": 0.85,
+  "minimumFirstTurnSuccessRate": 0.5,
+  "minimumVisualGatePassRate": 0.9,
+  "minimumAccessibilityGatePassRate": 1,
+  "maximumMergeConflictRate": 0.05
+}

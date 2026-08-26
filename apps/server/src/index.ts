@@ -5,9 +5,13 @@ import {
   ComponentBuildSpecSchema,
   FoundationInspectionRequestSchema,
   FoundationSetupRequestSchema,
+  ProjectRefreshRequestSchema,
+  ProjectRegistrationRequestSchema,
   ProjectInspectionRequestSchema,
 } from "@foundry/contracts";
 import { inspectProjectFoundation, setupProjectFoundation } from "@foundry/foundation";
+import { createDiagnosticsBundle } from "@foundry/diagnostics";
+import { evaluateRuns } from "@foundry/evaluation";
 import { BatchInputPreparer } from "@foundry/input-preparation";
 import {
   BatchDeliveryPipeline,
@@ -19,12 +23,14 @@ import { PersistenceError, SqliteRunStore } from "@foundry/persistence";
 import { inspectNextProject } from "@foundry/project-inspector";
 import { ClaudeAgentProvider } from "@foundry/provider-claude";
 import { CodexAgentProvider } from "@foundry/provider-codex";
+import { redactSecrets, redactText } from "@foundry/security";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { selectProjectDirectory } from "./directory-picker.js";
 
 export function formatRunEventForSse(event: {
   sequence: number;
@@ -39,14 +45,16 @@ export function createServer(
     providers?: readonly AgentProvider[];
     databasePath?: string;
     deliveryRunnerFactory?: () => DurableDeliveryRunner;
+    directoryPicker?: () => Promise<string | undefined>;
   } = {},
 ) {
   const server = Fastify({ logger: options.logger ?? true });
   const providers = new AgentProviderRegistry(
     options.providers ?? [new CodexAgentProvider(), new ClaudeAgentProvider()],
   );
+  const repository = new SqliteRunStore({ databasePath: options.databasePath ?? ":memory:" });
   const coordinator = new DurableRunCoordinator({
-    repository: new SqliteRunStore({ databasePath: options.databasePath ?? ":memory:" }),
+    repository,
     deliveryRunnerFactory:
       options.deliveryRunnerFactory ?? (() => new BatchDeliveryPipeline({ providers })),
   });
@@ -84,6 +92,29 @@ export function createServer(
     const snapshot = coordinator.getSnapshot(runId);
     if (!snapshot) return reply.status(404).send({ error: "RUN_NOT_FOUND" });
     return snapshot;
+  });
+
+  server.get("/api/runs/:runId/diagnostics", async (request, reply) => {
+    const { runId } = request.params as { runId: string };
+    const snapshot = coordinator.getSnapshot(runId);
+    if (!snapshot) return reply.status(404).send({ error: "RUN_NOT_FOUND" });
+    const filename = `${runId.replace(/[^A-Za-z0-9._-]/g, "_")}-diagnostics.json`;
+    return reply
+      .type("application/json")
+      .header("content-disposition", `attachment; filename="${filename}"`)
+      .send(createDiagnosticsBundle(snapshot));
+  });
+
+  server.get("/api/evaluations/summary", async (request, reply) => {
+    const query = request.query as { limit?: string };
+    const limit = query.limit === undefined ? 100 : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      return reply.status(400).send({ error: "INVALID_LIMIT" });
+    }
+    const snapshots = coordinator
+      .listRuns({ limit })
+      .flatMap(({ runId }) => coordinator.getSnapshot(runId) ?? []);
+    return evaluateRuns(snapshots);
   });
 
   server.get("/api/runs/:runId/events", async (request, reply) => {
@@ -198,6 +229,62 @@ export function createServer(
     return { valid: true, specification: result.data };
   });
 
+  server.get("/api/projects", async () => repository.listProjects());
+
+  server.post("/api/system/select-directory", async (_request, reply) => {
+    try {
+      const path = await (options.directoryPicker ?? selectProjectDirectory)();
+      return { cancelled: path === undefined, ...(path ? { path } : {}) };
+    } catch (error) {
+      return reply.status(501).send({
+        error: "DIRECTORY_PICKER_UNAVAILABLE",
+        message: error instanceof Error ? error.message : "The directory picker is unavailable.",
+      });
+    }
+  });
+
+  server.get("/api/projects/:projectId", async (request, reply) => {
+    const { projectId } = request.params as { projectId: string };
+    const project = repository.getProject(projectId);
+    if (!project) return reply.status(404).send({ error: "PROJECT_NOT_FOUND" });
+    return project;
+  });
+
+  server.post("/api/projects/register", async (request, reply) => {
+    const input = ProjectRegistrationRequestSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.status(400).send({ error: "INVALID_REQUEST", issues: input.error.issues });
+    }
+    const inspection = await inspectNextProject({
+      rootDir: input.data.rootDir,
+      ...(input.data.projectId ? { projectId: input.data.projectId } : {}),
+    });
+    if (inspection.status !== "supported") return reply.status(422).send(inspection);
+    const previous = repository.getProject(inspection.profile.projectId)?.foundation;
+    const foundation = await inspectProjectFoundation(inspection.profile, {
+      ...(previous ? { previous } : {}),
+      acceptChanges: input.data.acceptFoundationChanges,
+    });
+    return reply.status(201).send(repository.saveProject(inspection.profile, foundation));
+  });
+
+  server.post("/api/projects/:projectId/refresh", async (request, reply) => {
+    const { projectId } = request.params as { projectId: string };
+    const input = ProjectRefreshRequestSchema.safeParse(request.body ?? {});
+    if (!input.success) {
+      return reply.status(400).send({ error: "INVALID_REQUEST", issues: input.error.issues });
+    }
+    const existing = repository.getProject(projectId);
+    if (!existing) return reply.status(404).send({ error: "PROJECT_NOT_FOUND" });
+    const inspection = await inspectNextProject({ rootDir: existing.rootDir, projectId });
+    if (inspection.status !== "supported") return reply.status(422).send(inspection);
+    const foundation = await inspectProjectFoundation(inspection.profile, {
+      previous: existing.foundation,
+      acceptChanges: input.data.acceptFoundationChanges,
+    });
+    return repository.saveProject(inspection.profile, foundation);
+  });
+
   server.post("/api/projects/inspect", async (request, reply) => {
     const input = ProjectInspectionRequestSchema.safeParse(request.body);
     if (!input.success) {
@@ -240,13 +327,21 @@ export function createServer(
       return reply.status(422).send(inspection);
     }
     try {
-      return await setupProjectFoundation(inspection.profile, input.data.specification, {
-        overwrite: input.data.overwrite,
-      });
+      const foundation = await setupProjectFoundation(
+        inspection.profile,
+        input.data.specification,
+        {
+          overwrite: input.data.overwrite,
+        },
+      );
+      if (repository.getProject(inspection.profile.projectId)) {
+        repository.saveProject(inspection.profile, foundation);
+      }
+      return foundation;
     } catch (error) {
       return reply.status(409).send({
         error: "FOUNDATION_SETUP_FAILED",
-        message: error instanceof Error ? error.message : String(error),
+        message: redactText(error instanceof Error ? error.message : String(error)),
       });
     }
   });
@@ -263,12 +358,12 @@ export function createServer(
           events.push(event);
         },
       });
-      return { result, events };
+      return redactSecrets({ result, events });
     } catch (error) {
       return reply.status(409).send({
         error: "BATCH_EXECUTION_FAILED",
-        message: error instanceof Error ? error.message : String(error),
-        events,
+        message: redactText(error instanceof Error ? error.message : String(error)),
+        events: redactSecrets(events),
       });
     }
   });
@@ -283,11 +378,11 @@ export function createServer(
         ...parsed.data,
         inputPreparation: { ...parsed.data.inputPreparation, enabled: true },
       });
-      return await new BatchInputPreparer().prepare(input);
+      return redactSecrets(await new BatchInputPreparer().prepare(input));
     } catch (error) {
       return reply.status(409).send({
         error: "INPUT_PREPARATION_FAILED",
-        message: error instanceof Error ? error.message : String(error),
+        message: redactText(error instanceof Error ? error.message : String(error)),
       });
     }
   });
@@ -304,12 +399,12 @@ export function createServer(
           events.push(event);
         },
       });
-      return { result, events };
+      return redactSecrets({ result, events });
     } catch (error) {
       return reply.status(409).send({
         error: "BATCH_DELIVERY_FAILED",
-        message: error instanceof Error ? error.message : String(error),
-        events,
+        message: redactText(error instanceof Error ? error.message : String(error)),
+        events: redactSecrets(events),
       });
     }
   });

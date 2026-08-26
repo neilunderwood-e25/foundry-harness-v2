@@ -1,6 +1,36 @@
 import type { DurableRunSnapshot, RunEvent } from "@foundry/contracts";
-import { useMemo, useState } from "react";
-import { artifactUrl } from "../api.js";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+import {
+  AlertCircle,
+  Boxes,
+  Clock3,
+  Copy,
+  Download,
+  ExternalLink,
+  FileText,
+  GitBranch,
+  Image as ImageIcon,
+  Layers3,
+  Radio,
+  ShieldCheck,
+  Square,
+} from "lucide-react";
+import { useMemo } from "react";
+import { artifactUrl, diagnosticsUrl } from "../api.js";
 import {
   componentName,
   componentProvider,
@@ -11,10 +41,7 @@ import {
   runProgress,
   shortId,
 } from "../model.js";
-import { BranchIcon, CopyIcon, ExternalIcon, FileIcon, StopIcon } from "./Icons.js";
 import { JobStatus, StatusBadge } from "./StatusBadge.js";
-
-type DetailTab = "overview" | "events" | "evidence";
 
 function eventLabel(event: RunEvent): string {
   const payload = event.payload;
@@ -61,6 +88,31 @@ function phaseLabel(value: string): string {
     .replace(/(^|\s)\S/g, (character) => character.toUpperCase());
 }
 
+function MetricCard(props: {
+  readonly label: string;
+  readonly value: string | number;
+  readonly detail?: string;
+  readonly icon: typeof Clock3;
+}) {
+  const Icon = props.icon;
+  return (
+    <Card size="sm">
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <div>
+          <CardDescription className="text-xs">{props.label}</CardDescription>
+          <CardTitle className="mt-1 text-xl font-semibold tabular-nums">{props.value}</CardTitle>
+        </div>
+        <span className="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground">
+          <Icon className="size-4" />
+        </span>
+      </CardHeader>
+      {props.detail && (
+        <CardContent className="text-xs text-muted-foreground">{props.detail}</CardContent>
+      )}
+    </Card>
+  );
+}
+
 interface RunDetailProps {
   readonly snapshot: DurableRunSnapshot;
   readonly connected: boolean;
@@ -70,7 +122,6 @@ interface RunDetailProps {
 }
 
 export function RunDetail(props: RunDetailProps) {
-  const [tab, setTab] = useState<DetailTab>("overview");
   const snapshot = props.snapshot;
   const request = deliveryRequest(snapshot.run);
   const progress = runProgress(snapshot);
@@ -84,286 +135,394 @@ export function RunDetail(props: RunDetailProps) {
   );
 
   return (
-    <main className="run-detail">
-      <header className="run-header">
-        <div className="run-heading">
-          <div className="run-title-row">
-            <StatusBadge status={snapshot.run.status} />
+    <main className="min-w-0 p-4 sm:p-6 xl:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <header className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={snapshot.run.status} />
+              {active && (
+                <Badge variant="outline" className="gap-1.5 font-normal">
+                  <Radio className={cn("size-3", props.connected && "text-emerald-600")} />
+                  {props.connected ? "Live" : "Reconnecting"}
+                </Badge>
+              )}
+            </div>
+            <h1
+              className="mt-3 truncate font-mono text-2xl font-semibold tracking-tight sm:text-3xl"
+              title={snapshot.run.runId}
+            >
+              {snapshot.run.runId}
+            </h1>
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span>{snapshot.run.projectId}</span>
+              <span>•</span>
+              <span>{request?.batch.components.length ?? snapshot.jobs.length} components</span>
+              <span>•</span>
+              <span>Updated {formatRelativeTime(snapshot.run.updatedAt)}</span>
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => window.location.assign(diagnosticsUrl(snapshot.run.runId))}
+            >
+              <Download data-icon="inline-start" /> Diagnostics
+            </Button>
+            <Button variant="outline" onClick={props.onDuplicate}>
+              <Copy data-icon="inline-start" /> Duplicate
+            </Button>
             {active && (
-              <span className={`live-indicator${props.connected ? " connected" : ""}`}>
-                <span /> {props.connected ? "Live" : "Reconnecting"}
-              </span>
+              <Button variant="destructive" onClick={props.onCancel} disabled={props.cancelling}>
+                <Square data-icon="inline-start" />
+                {props.cancelling ? "Cancelling…" : "Cancel run"}
+              </Button>
             )}
           </div>
-          <h1 title={snapshot.run.runId}>{snapshot.run.runId}</h1>
-          <p>
-            <span>{snapshot.run.projectId}</span>
-            <span>·</span>
-            <span>{request?.batch.components.length ?? snapshot.jobs.length} components</span>
-            <span>·</span>
-            <span>updated {formatRelativeTime(snapshot.run.updatedAt)}</span>
-          </p>
-        </div>
-        <div className="run-actions">
-          <button className="text-button duplicate-button" onClick={props.onDuplicate}>
-            <CopyIcon /> Duplicate
-          </button>
-          {active && (
-            <button className="danger-button" onClick={props.onCancel} disabled={props.cancelling}>
-              <StopIcon /> {props.cancelling ? "Cancelling…" : "Cancel run"}
-            </button>
-          )}
-        </div>
-      </header>
+        </header>
 
-      {snapshot.run.errorMessage && (
-        <div className="run-error-banner">
-          <strong>{snapshot.run.errorCode ?? "Run failed"}</strong>
-          <p>{snapshot.run.errorMessage}</p>
-        </div>
-      )}
+        {snapshot.run.errorMessage && (
+          <Alert variant="destructive">
+            <AlertCircle />
+            <AlertTitle>{snapshot.run.errorCode ?? "Run failed"}</AlertTitle>
+            <AlertDescription>{snapshot.run.errorMessage}</AlertDescription>
+          </Alert>
+        )}
 
-      <section className="run-metrics" aria-label="Run summary">
-        <div className="progress-metric">
-          <div className="metric-topline">
-            <span>Delivery progress</span>
-            <strong>{progress}%</strong>
-          </div>
-          <div className="progress-track">
-            <span style={{ width: `${progress}%` }} />
-          </div>
-          <small>
-            {snapshot.jobs.filter(({ status }) => status === "passed").length} of{" "}
-            {snapshot.jobs.length || request?.batch.components.length || 0} components passed
-          </small>
-        </div>
-        <div className="metric-block">
-          <span>Elapsed</span>
-          <strong>{formatDuration(snapshot.run.startedAt, snapshot.run.completedAt)}</strong>
-        </div>
-        <div className="metric-block">
-          <span>Evidence</span>
-          <strong>{snapshot.artifacts.length}</strong>
-        </div>
-        <div className="metric-block">
-          <span>Attempts</span>
-          <strong>{snapshot.verificationReports.length}</strong>
-        </div>
-      </section>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-sm">
+              <span>Delivery progress</span>
+              <span className="tabular-nums">{progress}%</span>
+            </CardTitle>
+            <CardDescription>
+              {snapshot.jobs.filter(({ status }) => status === "passed").length} of{" "}
+              {snapshot.jobs.length || request?.batch.components.length || 0} components passed
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Progress value={progress} aria-label={`${progress}% complete`} />
+          </CardContent>
+        </Card>
 
-      <nav className="detail-tabs" aria-label="Run details">
-        {(["overview", "events", "evidence"] as const).map((value) => (
-          <button
-            className={tab === value ? "active" : ""}
-            key={value}
-            onClick={() => setTab(value)}
-          >
-            {value}
-            {value === "events" && <span>{snapshot.events.length}</span>}
-            {value === "evidence" && <span>{snapshot.artifacts.length}</span>}
-          </button>
-        ))}
-      </nav>
+        <section className="grid gap-3 sm:grid-cols-3">
+          <MetricCard
+            label="Elapsed"
+            value={formatDuration(snapshot.run.startedAt, snapshot.run.completedAt)}
+            icon={Clock3}
+          />
+          <MetricCard
+            label="Evidence"
+            value={snapshot.artifacts.length}
+            detail="Retained artifacts"
+            icon={FileText}
+          />
+          <MetricCard
+            label="Verification"
+            value={snapshot.verificationReports.length}
+            detail="Recorded attempts"
+            icon={ShieldCheck}
+          />
+        </section>
 
-      {tab === "overview" && (
-        <div className="overview-layout">
-          <section className="panel component-panel">
-            <div className="panel-heading">
-              <div>
-                <span className="eyebrow">Parallel workers</span>
-                <h2>Components</h2>
-              </div>
-              <span className="panel-count">
-                {snapshot.jobs.length || request?.batch.components.length || 0}
-              </span>
+        <Tabs defaultValue="overview" className="gap-4">
+          <TabsList variant="line" className="w-full justify-start border-b">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="events">
+              Events{" "}
+              <Badge variant="secondary" className="ml-1">
+                {snapshot.events.length}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="evidence">
+              Evidence{" "}
+              <Badge variant="secondary" className="ml-1">
+                {snapshot.artifacts.length}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(18rem,.8fr)]">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Boxes className="size-4 text-muted-foreground" />
+                    Components
+                  </CardTitle>
+                  <CardDescription>Parallel agent workers for this delivery.</CardDescription>
+                  <CardAction>
+                    <Badge variant="secondary">
+                      {snapshot.jobs.length || request?.batch.components.length || 0}
+                    </Badge>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="gap-2">
+                  {snapshot.jobs.length === 0
+                    ? request?.batch.components.map((component) => (
+                        <div
+                          className="flex items-center gap-3 rounded-lg border p-3"
+                          key={component.componentId}
+                        >
+                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold">
+                            {component.name.slice(0, 2).toUpperCase()}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="truncate text-sm font-medium">{component.name}</h3>
+                            <p className="text-xs text-muted-foreground">
+                              {component.agent.provider} · awaiting preparation
+                            </p>
+                          </div>
+                          <JobStatus status="queued" />
+                        </div>
+                      ))
+                    : snapshot.jobs.map((job) => (
+                        <div
+                          className="flex items-center gap-3 rounded-lg border p-3"
+                          key={job.jobId}
+                        >
+                          <span
+                            className={cn(
+                              "grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold",
+                              job.status === "running" && "bg-blue-50 text-blue-700",
+                              job.status === "passed" && "bg-emerald-50 text-emerald-700",
+                              job.status === "failed" && "bg-red-50 text-red-700",
+                            )}
+                          >
+                            {componentName(snapshot, job).slice(0, 2).toUpperCase()}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="truncate text-sm font-medium">
+                              {componentName(snapshot, job)}
+                            </h3>
+                            <p className="text-xs text-muted-foreground">
+                              {componentProvider(snapshot, job) ?? "agent"} ·{" "}
+                              {formatDuration(job.startedAt, job.completedAt)}
+                            </p>
+                            {job.errorMessage && (
+                              <p className="mt-1 truncate text-xs text-destructive">
+                                {job.errorMessage}
+                              </p>
+                            )}
+                          </div>
+                          <JobStatus status={job.status} />
+                        </div>
+                      ))}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Layers3 className="size-4 text-muted-foreground" />
+                    Stage timeline
+                  </CardTitle>
+                  <CardDescription>Harness-owned workflow stages.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {snapshot.steps.length === 0 ? (
+                    <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+                      Stages will appear when the run starts.
+                    </p>
+                  ) : (
+                    <ol className="space-y-0">
+                      {snapshot.steps.map((step, index) => (
+                        <li
+                          className="relative grid grid-cols-[1rem_minmax(0,1fr)_auto] gap-3 pb-5 last:pb-0"
+                          key={step.stepId}
+                        >
+                          {index < snapshot.steps.length - 1 && (
+                            <span className="absolute top-3 bottom-0 left-[5px] w-px bg-border" />
+                          )}
+                          <span
+                            className={cn(
+                              "relative z-10 mt-1 size-2.5 rounded-full border-2 border-background bg-muted-foreground ring-1 ring-border",
+                              step.status === "completed" && "bg-emerald-500",
+                              step.status === "running" && "animate-pulse bg-blue-500",
+                              step.status === "interrupted" && "bg-red-500",
+                            )}
+                          />
+                          <div className="min-w-0">
+                            <strong className="block truncate text-xs font-medium">
+                              {phaseLabel(step.phase)}
+                            </strong>
+                            <small className="font-mono text-[10px] text-muted-foreground">
+                              {step.jobId ? shortId(step.jobId, 28) : "batch"}
+                            </small>
+                          </div>
+                          <time className="text-[10px] text-muted-foreground">
+                            {formatDuration(step.startedAt, step.completedAt)}
+                          </time>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-            <div className="component-grid">
-              {snapshot.jobs.length === 0
-                ? request?.batch.components.map((component) => (
-                    <article className="component-card" key={component.componentId}>
-                      <div className="component-index">
-                        {component.name.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="component-copy">
-                        <h3>{component.name}</h3>
-                        <p>{component.agent.provider} · awaiting preparation</p>
-                      </div>
-                      <JobStatus status="queued" />
-                    </article>
-                  ))
-                : snapshot.jobs.map((job) => (
-                    <article className={`component-card component-${job.status}`} key={job.jobId}>
-                      <div className="component-index">
-                        {componentName(snapshot, job).slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="component-copy">
-                        <h3>{componentName(snapshot, job)}</h3>
-                        <p>
-                          {componentProvider(snapshot, job) ?? "agent"} ·{" "}
-                          {formatDuration(job.startedAt, job.completedAt)}
-                        </p>
-                        {job.errorMessage && <small>{job.errorMessage}</small>}
-                      </div>
-                      <JobStatus status={job.status} />
-                    </article>
+
+            {failedGates.length > 0 && (
+              <Card className="ring-destructive/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-destructive">
+                    <AlertCircle className="size-4" />
+                    Failed gates
+                  </CardTitle>
+                  <CardDescription>Verification issues that require attention.</CardDescription>
+                  <CardAction>
+                    <Badge variant="destructive">{failedGates.length}</Badge>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-2">
+                  {failedGates.map((gate, index) => (
+                    <Alert variant="destructive" key={`${gate.id}-${index}`}>
+                      <AlertCircle />
+                      <AlertTitle>{gate.label}</AlertTitle>
+                      <AlertDescription>{gate.detail ?? "No detail provided"}</AlertDescription>
+                    </Alert>
                   ))}
-            </div>
-          </section>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
 
-          <aside className="panel timeline-panel">
-            <div className="panel-heading">
-              <div>
-                <span className="eyebrow">Harness</span>
-                <h2>Stage timeline</h2>
-              </div>
-            </div>
-            <ol className="stage-list">
-              {snapshot.steps.length === 0 ? (
-                <li className="stage-empty">Stages will appear when the run starts.</li>
-              ) : (
-                snapshot.steps.map((step) => (
-                  <li className={`stage-${step.status}`} key={step.stepId}>
-                    <span className="stage-marker" />
+          <TabsContent value="events">
+            <Card>
+              <CardHeader>
+                <CardTitle>Run activity</CardTitle>
+                <CardDescription>Append-only event journal, newest first.</CardDescription>
+                <CardAction>
+                  <Badge variant="outline">latest #{sortedEvents[0]?.sequence ?? 0}</Badge>
+                </CardAction>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[34rem]">
+                  <div className="divide-y rounded-lg border">
+                    {sortedEvents.map((event) => (
+                      <article
+                        className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] gap-3 p-3"
+                        key={event.eventId}
+                      >
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          #{String(event.sequence).padStart(3, "0")}
+                        </span>
+                        <div className="min-w-0">
+                          <strong className="block font-mono text-xs font-medium">
+                            {event.payload.type}
+                          </strong>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                            {eventLabel(event)}
+                          </p>
+                        </div>
+                        <time
+                          className="hidden text-[10px] text-muted-foreground sm:block"
+                          dateTime={event.occurredAt}
+                        >
+                          {new Date(event.occurredAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </time>
+                      </article>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="evidence">
+            <Card>
+              <CardHeader>
+                <CardTitle>Artifacts & reports</CardTitle>
+                <CardDescription>Evidence retained outside component worktrees.</CardDescription>
+                <CardAction>
+                  <Badge variant="secondary">{snapshot.artifacts.length}</Badge>
+                </CardAction>
+              </CardHeader>
+              <CardContent>
+                {snapshot.artifacts.length === 0 ? (
+                  <div className="grid min-h-56 place-items-center rounded-lg border border-dashed text-center text-muted-foreground">
                     <div>
-                      <strong>{phaseLabel(step.phase)}</strong>
-                      <small>{step.jobId ? shortId(step.jobId, 30) : "batch"}</small>
+                      <FileText className="mx-auto size-7" />
+                      <p className="mt-2 text-sm">No artifacts captured yet.</p>
                     </div>
-                    <time>{formatDuration(step.startedAt, step.completedAt)}</time>
-                  </li>
-                ))
-              )}
-            </ol>
-          </aside>
-
-          {failedGates.length > 0 && (
-            <section className="panel gate-panel">
-              <div className="panel-heading">
-                <div>
-                  <span className="eyebrow">Attention</span>
-                  <h2>Failed gates</h2>
-                </div>
-                <span className="panel-count danger-count">{failedGates.length}</span>
-              </div>
-              <div className="gate-list">
-                {failedGates.map((gate, index) => (
-                  <article key={`${gate.id}-${index}`}>
-                    <strong>{gate.label}</strong>
-                    <span>{gate.category}</span>
-                    <p>{gate.detail ?? "No detail provided"}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
-
-      {tab === "events" && (
-        <section className="panel event-panel">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Append-only log</span>
-              <h2>Run activity</h2>
-            </div>
-            <span className="sequence-chip">latest #{sortedEvents[0]?.sequence ?? 0}</span>
-          </div>
-          <div className="event-list">
-            {sortedEvents.map((event) => (
-              <article
-                className={`event-item event-${event.payload.type.split(".")[0]}`}
-                key={event.eventId}
-              >
-                <span className="event-sequence">{String(event.sequence).padStart(3, "0")}</span>
-                <div>
-                  <strong>{event.payload.type}</strong>
-                  <p>{eventLabel(event)}</p>
-                </div>
-                <time dateTime={event.occurredAt}>
-                  {new Date(event.occurredAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}
-                </time>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {tab === "evidence" && (
-        <section className="panel evidence-panel">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Retained outside worktrees</span>
-              <h2>Artifacts & reports</h2>
-            </div>
-            <span className="panel-count">{snapshot.artifacts.length}</span>
-          </div>
-          {snapshot.artifacts.length === 0 ? (
-            <div className="evidence-empty">
-              <FileIcon />
-              <p>No artifacts have been captured yet.</p>
-            </div>
-          ) : (
-            <div className="artifact-grid">
-              {snapshot.artifacts.map((artifact) => {
-                const url = artifactUrl(snapshot.run.runId, artifact.artifactId);
-                return (
-                  <article className="artifact-card" key={artifact.artifactId}>
-                    <a className="artifact-preview" href={url} target="_blank" rel="noreferrer">
-                      {artifact.mediaType.startsWith("image/") ? (
-                        <img src={url} alt="" loading="lazy" />
-                      ) : (
-                        <FileIcon />
-                      )}
-                    </a>
-                    <div className="artifact-info">
-                      <span>{artifact.kind}</span>
-                      <strong title={artifact.artifactId}>
-                        {shortId(artifact.artifactId, 34)}
-                      </strong>
-                      <p title={artifact.path}>{shortId(artifact.path, 48)}</p>
-                    </div>
-                    <a
-                      className="artifact-open"
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Open artifact"
-                    >
-                      <ExternalIcon />
-                    </a>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      )}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {snapshot.artifacts.map((artifact) => {
+                      const url = artifactUrl(snapshot.run.runId, artifact.artifactId);
+                      return (
+                        <a
+                          className="group overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-md"
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          key={artifact.artifactId}
+                        >
+                          <div className="grid aspect-[16/7] place-items-center overflow-hidden bg-muted text-muted-foreground">
+                            {artifact.mediaType.startsWith("image/") ? (
+                              <img
+                                className="size-full object-cover transition-transform group-hover:scale-[1.02]"
+                                src={url}
+                                alt=""
+                                loading="lazy"
+                              />
+                            ) : (
+                              <ImageIcon className="size-7" />
+                            )}
+                          </div>
+                          <div className="flex items-start gap-3 p-3">
+                            <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                            <div className="min-w-0 flex-1">
+                              <Badge variant="secondary" className="mb-2">
+                                {artifact.kind}
+                              </Badge>
+                              <strong className="block truncate font-mono text-xs">
+                                {shortId(artifact.artifactId, 34)}
+                              </strong>
+                              <p
+                                className="mt-1 truncate text-[11px] text-muted-foreground"
+                                title={artifact.path}
+                              >
+                                {artifact.path}
+                              </p>
+                            </div>
+                            <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </main>
   );
 }
 
 export function EmptyRunDetail({ onNew }: { onNew: () => void }) {
   return (
-    <main className="run-detail empty-detail">
-      <div className="empty-mark">
-        <BranchIcon />
-      </div>
-      <span className="eyebrow">No run selected</span>
-      <h1>
-        Build sections in parallel,
-        <br />
-        without losing control.
-      </h1>
-      <p>
-        Launch a delivery or select a previous run to inspect worktrees, verification gates, and
-        retained evidence.
-      </p>
-      <button className="primary-button" onClick={onNew}>
-        Start a delivery
-      </button>
+    <main className="grid min-h-[65svh] place-items-center p-6">
+      <Card className="w-full max-w-xl text-center">
+        <CardHeader className="items-center">
+          <span className="mb-3 grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <GitBranch className="size-6" />
+          </span>
+          <CardTitle className="text-2xl">Build sections in parallel</CardTitle>
+          <CardDescription className="max-w-md">
+            Launch a delivery or select a previous run to inspect worktrees, verification gates, and
+            retained evidence.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="items-center">
+          <Button onClick={onNew}>Start a delivery</Button>
+        </CardContent>
+      </Card>
     </main>
   );
 }

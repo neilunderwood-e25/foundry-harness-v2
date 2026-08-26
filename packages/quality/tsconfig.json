@@ -1,8 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
+    "paths": {
+      "@foundry/contracts": ["../contracts/src/index.ts"],
+      "@foundry/security": ["../security/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

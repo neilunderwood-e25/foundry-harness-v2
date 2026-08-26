@@ -3,6 +3,9 @@
 Milestone 8 turns the durable run API into an operational workspace. The console is intentionally
 local-first and has no direct database or agent SDK access.
 
+The interface uses shadcn/ui preset `b5JPPcgmu` (`base-vega`, Mist tokens, Base UI primitives,
+Inter Variable, and Lucide icons). Shared primitives live in `apps/console/src/components/ui`.
+
 ## Production-style local run
 
 ```bash
@@ -26,6 +29,10 @@ Open `http://127.0.0.1:4601/console/`. Vite proxies `/health` and `/api` to the 
 
 ## Capabilities
 
+- Register Next.js projects before their first run.
+- Review ready, missing, and stale Style Guide/Container foundations.
+- Refresh project readiness and explicitly accept reviewed foundation changes.
+- Review release thresholds and Claude/Codex results in the Insights workspace.
 - Search recent runs and filter them by project.
 - See harness availability and active/passed run totals.
 - Launch a schema-version-1 delivery document without placing credentials in the JSON.
@@ -36,6 +43,7 @@ Open `http://127.0.0.1:4601/console/`. Vite proxies `/health` and `/api` to the 
 - Cancel queued or active runs explicitly.
 - Inspect append-only events, failed verification gates, screenshots, diffs, reports, logs, and
   prepared-input artifacts.
+- Download a sanitized diagnostics bundle for any run.
 
 ## Artifact safety
 

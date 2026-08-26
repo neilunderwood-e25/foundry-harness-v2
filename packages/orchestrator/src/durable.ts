@@ -11,6 +11,7 @@ import {
   type RunId,
 } from "@foundry/contracts";
 import type { RunEventSink } from "./events.js";
+import { redactSecrets, redactText } from "@foundry/security";
 
 export interface DurableDeliveryRunner {
   deliver(
@@ -51,12 +52,12 @@ function failure(error: unknown): { code: string; message: string } {
   ) {
     return {
       code: error.code,
-      message: error instanceof Error ? error.message : String(error),
+      message: redactText(error instanceof Error ? error.message : String(error)),
     };
   }
   return {
     code: "DURABLE_RUN_FAILED",
-    message: error instanceof Error ? error.message : String(error),
+    message: redactText(error instanceof Error ? error.message : String(error)),
   };
 }
 
@@ -160,8 +161,9 @@ export class DurableRunCoordinator {
       const result = await this.#deliveryRunnerFactory().deliver(request, {
         signal: controller.signal,
         onEvent: async (event) => {
-          this.#repository.appendEvent(event);
-          this.#publish(event);
+          const safeEvent = redactSecrets(event);
+          this.#repository.appendEvent(safeEvent);
+          this.#publish(safeEvent);
         },
       });
       this.#repository.recordDeliveryResult(result);

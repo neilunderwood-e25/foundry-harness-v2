@@ -6,6 +6,7 @@ import {
   type ArtifactRef,
   type VerificationGate,
 } from "@foundry/contracts";
+import { redactText } from "@foundry/security";
 import { PlaywrightBrowserInspector } from "./browser.js";
 import { QualityError } from "./errors.js";
 import { FigmaRestReferenceProvider } from "./figma.js";
@@ -248,7 +249,7 @@ export class VisualAccessibilityVerifier implements QualityGateProvider {
       await mkdir(dirname(logPath), { recursive: true });
       await writeFile(
         logPath,
-        `${failure.code}: ${failure.message}\n${preview?.logs() ?? ""}`,
+        redactText(`${failure.code}: ${failure.message}\n${preview?.logs() ?? ""}`),
         "utf8",
       );
       return [

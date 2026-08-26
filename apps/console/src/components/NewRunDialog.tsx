@@ -1,5 +1,16 @@
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { AlertCircle, Play } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CloseIcon } from "./Icons.js";
 import { parseDeliveryDocument } from "../model.js";
 
 interface NewRunDialogProps {
@@ -21,15 +32,6 @@ export function NewRunDialog(props: NewRunDialogProps) {
     setLocalError(undefined);
   }, [props.initialDocument, props.open]);
 
-  useEffect(() => {
-    if (!props.open) return;
-    const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !props.pending) props.onClose();
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [props]);
-
   const submit = () => {
     try {
       setLocalError(undefined);
@@ -39,58 +41,53 @@ export function NewRunDialog(props: NewRunDialogProps) {
     }
   };
 
-  if (!props.open) return null;
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={props.onClose}>
-      <section
-        className="new-run-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-run-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header>
-          <div>
-            <span className="eyebrow">New delivery</span>
-            <h2 id="new-run-title">Launch a component batch</h2>
-            <p>Paste a validated delivery document. Credentials stay in the server environment.</p>
+    <Dialog open={props.open} onOpenChange={(open) => !open && !props.pending && props.onClose()}>
+      <DialogContent className="max-w-3xl sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="text-xl">Launch a component batch</DialogTitle>
+          <DialogDescription>
+            Paste a schema-version-1 delivery document. Credentials remain in the server
+            environment.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium" htmlFor="delivery-json">
+              Delivery JSON
+            </label>
+            <span className="font-mono text-xs text-muted-foreground">schemaVersion 1</span>
           </div>
-          <button className="icon-button" onClick={props.onClose} disabled={props.pending}>
-            <CloseIcon />
-            <span className="sr-only">Close</span>
-          </button>
-        </header>
-        <label className="json-editor-label" htmlFor="delivery-json">
-          Delivery JSON
-          <span>schemaVersion 1</span>
-        </label>
-        <textarea
-          id="delivery-json"
-          className="json-editor"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder={'{\n  "schemaVersion": 1,\n  "project": { ... }\n}'}
-          spellCheck={false}
-          autoFocus
-        />
+          <Textarea
+            id="delivery-json"
+            className="min-h-96 resize-y bg-slate-950 font-mono text-xs leading-relaxed text-slate-100 selection:bg-primary/40"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder={'{\n  "schemaVersion": 1,\n  "project": { ... }\n}'}
+            spellCheck={false}
+            autoFocus
+          />
+        </div>
+
         {(localError ?? props.error) && (
-          <div className="dialog-error" role="alert">
-            {localError ?? props.error}
-          </div>
+          <Alert variant="destructive">
+            <AlertCircle />
+            <AlertTitle>Unable to start delivery</AlertTitle>
+            <AlertDescription>{localError ?? props.error}</AlertDescription>
+          </Alert>
         )}
-        <footer>
-          <button className="text-button" onClick={props.onClose} disabled={props.pending}>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={props.onClose} disabled={props.pending}>
             Cancel
-          </button>
-          <button
-            className="primary-button"
-            onClick={submit}
-            disabled={props.pending || !value.trim()}
-          >
+          </Button>
+          <Button onClick={submit} disabled={props.pending || !value.trim()}>
+            <Play data-icon="inline-start" />
             {props.pending ? "Starting…" : "Start delivery"}
-          </button>
-        </footer>
-      </section>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
