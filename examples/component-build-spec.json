@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "runId": "example-run",
+  "componentId": "hero-primary",
+  "projectId": "example-project",
+  "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "foundationFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "name": "Hero Primary",
+  "slug": "hero-primary",
+  "design": {
+    "desktopFrameUrl": "https://www.figma.com/design/example/Foundry?node-id=1-2",
+    "mobileFrameUrl": "https://www.figma.com/design/example/Foundry?node-id=3-4"
+  },
+  "cms": {
+    "provider": "contentful",
+    "contentType": "HeroSection",
+    "variantField": "frontendComponent",
+    "variantValue": "Hero Primary"
+  },
+  "agent": {
+    "provider": "codex",
+    "maxRepairTurns": 3
+  }
+}

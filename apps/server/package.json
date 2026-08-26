@@ -1,0 +1,22 @@
+{
+  "name": "@foundry/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@foundry/agent-runtime": "workspace:*",
+    "@foundry/contracts": "workspace:*",
+    "@foundry/foundation": "workspace:*",
+    "@foundry/orchestrator": "workspace:*",
+    "@foundry/project-inspector": "workspace:*",
+    "@foundry/provider-claude": "workspace:*",
+    "@foundry/provider-codex": "workspace:*",
+    "fastify": "^5.6.0"
+  }
+}

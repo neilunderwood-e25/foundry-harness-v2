@@ -1,0 +1,21 @@
+:root {
+  --color-primary: #112233;
+  --color-surface: #ffffff;
+  --spacing-section: 5rem;
+  --spacing-gutter: 1rem;
+  --breakpoint-md: 768px;
+  --breakpoint-xl: 1280px;
+}
+
+.type-heading-xl {
+  font-family: "Inter", sans-serif;
+  font-size: 4rem;
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+@media (min-width: 1280px) {
+  .type-heading-xl {
+    font-size: 5rem;
+  }
+}

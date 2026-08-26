@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "projectId": "example-project",
+  "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "styleGuide": {
+    "tokenFile": "styles/foundry/tokens.css",
+    "globalCssFile": "src/app/globals.css",
+    "colors": [
+      { "name": "primary", "value": "#112233" },
+      { "name": "surface", "value": "#ffffff" }
+    ],
+    "spacing": [
+      { "name": "gutter", "value": "1rem" },
+      { "name": "section", "value": "5rem" }
+    ],
+    "typography": [
+      {
+        "name": "heading-xl",
+        "fontFamily": "\"Inter\", sans-serif",
+        "fontSize": "4rem",
+        "lineHeight": "1.05",
+        "fontWeight": 700
+      }
+    ],
+    "breakpoints": { "md": 768, "xl": 1280 }
+  },
+  "container": {
+    "componentPath": "src/components/ui/Container.tsx",
+    "importPath": "@/components/ui/Container",
+    "desktopMaxWidth": 1440,
+    "mobileMaxWidth": "fluid",
+    "paddingByBreakpoint": {
+      "base": { "top": 0, "right": 16, "bottom": 0, "left": 16 },
+      "md": { "top": 0, "right": 32, "bottom": 0, "left": 32 },
+      "xl": { "top": 0, "right": 80, "bottom": 0, "left": 80 }
+    },
+    "supportsFullBleed": true
+  }
+}
